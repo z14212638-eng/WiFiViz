@@ -26,22 +26,22 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
 
 private:
-    void ensureBucketFor(uint64_t ns);
-    double bucketMbps(int index) const;
+    void scheduleUpdate();
+    double sampleMbps(int index) const;
     int indexFromX(int x, int plotLeft, int plotWidth) const;
-    uint64_t bucketStartNs(int index) const;
+    uint64_t sampleTimeNs(int index) const;
     int visibleCountForWidth(int plotWidth) const;
     int viewEndIndex() const;
     void updateScrollBars();
 
 private:
-    uint64_t m_bucketNs = 100000000; // 100 ms
-    int m_maxBuckets = 200;          // 20 s window
+    uint64_t m_bucketNs = 100000000; // kept for API compatibility
+    int m_maxBuckets = 200000;
 
-    QVector<uint64_t> m_bucketStartNs;
-    QVector<uint64_t> m_bucketBytes;
-    QVector<PpduVisualItem> m_bucketSample;
-    uint64_t m_latestNs = 0;
+    QVector<uint64_t> m_sampleTimeNs;
+    QVector<uint32_t> m_sampleThroughputX100;
+    QVector<PpduVisualItem> m_sampleItems;
+    bool m_updateQueued = false;
 
     bool m_hovering = false;
     int m_hoverIndex = -1;

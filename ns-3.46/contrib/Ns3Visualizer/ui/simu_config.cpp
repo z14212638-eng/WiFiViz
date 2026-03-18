@@ -666,7 +666,9 @@ void Simu_Config::Create_And_StartThread() {
   connect(
       m_ppduReader, &QtPpduReader::ppduReady, this,
       [this](const PpduVisualItem &item) {
-        m_hasPpdu.store(true);
+        if (item.recordType == RecordType::Ppdu) {
+          m_hasPpdu.store(true);
+        }
         emit ppduReady(item);
       },
       Qt::DirectConnection);

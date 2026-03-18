@@ -7,7 +7,7 @@ LegendOverlay::LegendOverlay(QWidget *parent)
               Qt::FramelessWindowHint |
               Qt::BypassWindowManagerHint)
 {
-    setFixedSize(240, 180);
+    setFixedSize(280, 320);
     setAttribute(Qt::WA_TranslucentBackground);
     setAttribute(Qt::WA_ShowWithoutActivating);
 }
@@ -73,6 +73,17 @@ void LegendOverlay::paintEvent(QPaintEvent *)
     
     // Hovered
     drawItem(Qt::red, "Hovered PPDU");
+
+    // Channel-state colors
+    drawItem(QColor(150, 164, 180, 150), "Channel IDLE");
+    drawItem(QColor(62, 140, 94, 210), "Channel BUSY");
+    drawItem(QColor(220, 88, 64, 220), "Channel COLLISION");
+
+    // PHY-state colors
+    drawItem(QColor(150, 164, 180, 150), "PHY IDLE");
+    drawItem(QColor(223, 170, 58, 220), "PHY CCA_BUSY");
+    drawItem(QColor(62, 140, 94, 220), "PHY TX");
+    drawItem(QColor(76, 114, 176, 220), "PHY RX");
     
     // Data flow
     drawArrowItem("Data Flow");

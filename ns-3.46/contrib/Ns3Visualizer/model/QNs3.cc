@@ -111,21 +111,21 @@ ParseBoolToken(const json& value)
 }
 
 // Get a general optional bool value
-static std::optional<bool>
-GetOptionalBool(const json& j, const char* key)
-{
-    if (!j.contains(key))
-    {
-        std::cout << "The key  \"" << key << "\" is [Not Found] in the object" << std::endl;
-        return std::nullopt;
-    }
-    else if (j.at(key).is_null())
-    {
-        std::cout << "The key  \"" << key << "\" is [Null] in the object" << std::endl;
-        return std::nullopt;
-    }
-    return ParseBoolToken(j.at(key));
-}
+// static std::optional<bool>
+// GetOptionalBool(const json& j, const char* key)
+// {
+//     if (!j.contains(key))
+//     {
+//         std::cout << "The key  \"" << key << "\" is [Not Found] in the object" << std::endl;
+//         return std::nullopt;
+//     }
+//     else if (j.at(key).is_null())
+//     {
+//         std::cout << "The key  \"" << key << "\" is [Null] in the object" << std::endl;
+//         return std::nullopt;
+//     }
+//     return ParseBoolToken(j.at(key));
+// }
 
 // Get a general optional value
 template <typename T>

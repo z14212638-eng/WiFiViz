@@ -141,7 +141,7 @@ public:
 
     // Rts/Cts
     bool RtsCts = false;
-    qint16 RtsCts_Threshold = 65535;
+    quint16 RtsCts_Threshold = 65535;
 
     QString Rate_ctr_algo = "Aarf";
     QString TxQueue = "DropTail";
@@ -173,7 +173,7 @@ public:
 
     bool Msdu_aggregation = true;
     QString AMsdu_type = "AC_BE";
-    qint16 MaxAMsduSize = 65535;
+    quint16 MaxAMsduSize = 65535;
 
     bool Mpdu_aggregation = true;
     QString AMpdu_type = "AC_BE";
@@ -222,7 +222,7 @@ public:
 
     // Rts/Cts
     bool RtsCts = false;
-    qint16 RtsCts_Threshold = 65535;
+    quint16 RtsCts_Threshold = 65535;
 
     QString Rate_ctr_algo = "Aarf";
     QString TxQueue = "DropTail";
@@ -253,7 +253,7 @@ public:
 
     bool Msdu_aggregation = true;
     QString AMsdu_type = "AC_BE";
-    qint16 MaxAMsduSize = 65535;
+    quint16 MaxAMsduSize = 65535;
 
     bool Mpdu_aggregation = true;
     QString AMpdu_type = "AC_BE";
