@@ -310,13 +310,10 @@ void Ap_config::setMobility(Ap &one_ap)
         one_ap.mode = "Random Mobility Model";
         double x_max = this->Building_range[0];
         double y_max = this->Building_range[1];
-        double z_max = this->Building_range[2];
         double x_rand_1 = get_true_random_double(0, x_max);
         double y_rand_1 = get_true_random_double(0, y_max);
-        double z_rand_1 = get_true_random_double(0, z_max);
         double x_rand_2 = get_true_random_double(0, x_max);
         double y_rand_2 = get_true_random_double(0, y_max);
-        double z_rand_2 = get_true_random_double(0, z_max);
 
         ui->doubleSpinBox_14->setValue((x_rand_1 > x_rand_2) ? x_rand_2 : x_rand_1);
         ui->doubleSpinBox_15->setValue((x_rand_1 > x_rand_2) ? x_rand_1 : x_rand_2);
@@ -890,4 +887,3 @@ void Ap_config::resetPage()
 
     qDebug() << "[Ap_config] resetPage() done";
 }
-

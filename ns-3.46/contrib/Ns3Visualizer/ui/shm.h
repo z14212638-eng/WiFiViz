@@ -9,23 +9,24 @@
 #include <chrono>
 
 using sim_time_ns_t = uint64_t;
-using mac_addr_t = uint64_t;
 using ppdu_id_t = uint32_t;
 constexpr std::size_t MAX_PPDU_NUM = 1 << 20; // about 1 million PPDUs
 
 struct PPDU_Meta
 {
     ppdu_id_t id;
-    uint16_t node_id;
+    uint8_t record_type;
+    uint16_t sta_id;
     uint8_t channel_id;
 
     uint8_t frame_type;
     uint8_t mcs;
     uint16_t mpdu_aggregation;
     uint32_t size_bytes;
+    uint32_t throughput_mbps_x100;
 
-    mac_addr_t sender;
-    mac_addr_t receiver;
+    uint8_t sender[6];
+    uint8_t receiver[6];
 
     sim_time_ns_t tx_start_ns;
     sim_time_ns_t tx_end_ns;
@@ -40,10 +41,15 @@ struct PPDU_Meta
     uint8_t collision;
     sim_time_ns_t collision_time_ns;
 
-    int16_t snr_margin_db_x10; // SNR x10
-    int16_t snr_gap_db_x10;
+    uint16_t snr_margin_db_x10; // SNR x10
+    uint16_t snr_gap_db_x10;
 
-    uint8_t reserved[6];
+    uint8_t phy_state;
+    sim_time_ns_t phy_state_start_ns;
+    sim_time_ns_t phy_state_end_ns;
+    sim_time_ns_t phy_state_duration_ns;
+
+    uint8_t reserved[1];
 };
 
 /**
@@ -61,4 +67,3 @@ struct RingBuffer
 
     PPDU_Meta records[MAX_PPDU_NUM];
 };
-

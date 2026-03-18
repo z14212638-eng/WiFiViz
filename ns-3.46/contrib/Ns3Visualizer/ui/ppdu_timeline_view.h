@@ -3,6 +3,7 @@
 #include <QWidget>
 #include <QVector>
 #include <QPushButton>
+#include <QString>
 
 #include <QFileDialog>
 #include <QInputDialog>
@@ -12,10 +13,20 @@
 #include "legend_overlay.h"
 #include "utils.h"
 
+class QPainter;
+
 enum class TimelineRowMode
 {
     ByAp,
-    ByChannel
+    ByChannel,
+    ByNodeLink
+};
+
+enum class TimelineViewMode
+{
+    PpduTimeline,
+    ChannelState,
+    PhyStateTimeline
 };
 
 struct TimeRangeStats
@@ -29,6 +40,22 @@ struct TimeRangeStats
 
     double throughputMbps = 0.0;
     double utilization = 0.0; // [0,1]
+};
+
+struct CachedPpduLayoutItem
+{
+    uint64_t rowKey = 0;
+    int row = -1;
+    int lane = 0;
+    bool overlap = false;
+};
+
+struct CachedPpduRow
+{
+    uint64_t rowKey = 0;
+    QString label;
+    QVector<int> itemIndices;
+    int laneCount = 1;
 };
 
 class PpduTimelineView : public QWidget,public ResettableBase
@@ -76,6 +103,17 @@ private:
     int apCount() const;
     int effectiveRowHeight() const;
     int timelineTopY() const;
+    void paintPpduTimeline(QPainter &painter);
+    void paintChannelStateView(QPainter &painter);
+    void paintPhyStateTimeline(QPainter &painter);
+    bool showChannelStateHover(const QPoint &pos);
+    bool showPhyStateHover(const QPoint &pos);
+    void updateModeButton();
+    std::pair<uint64_t, uint64_t> currentTimeBounds() const;
+    void scheduleDataUpdate();
+    void rebuildPpduLayoutCache();
+    void ensurePpduLayoutCache() const;
+    void markPpduLayoutDirty();
 
     /* ===== logic ===== */
     bool hasOverlap(int idx) const;
@@ -83,7 +121,12 @@ private:
     uint64_t rowKey(const PpduVisualItem &ppdu) const;
 
 private:
-    QVector<PpduVisualItem> m_items;
+    QVector<PpduVisualItem> m_ppduItems;
+    QVector<PpduVisualItem> m_phyStateItems;
+    mutable QVector<CachedPpduLayoutItem> m_cachedPpduLayout;
+    mutable QVector<CachedPpduRow> m_cachedPpduRows;
+    mutable bool m_ppduLayoutDirty = true;
+    bool m_dataUpdateQueued = false;
 
     /* view */
     int64_t m_viewStartNs = 0;
@@ -138,4 +181,5 @@ private:
 
     /* ===== view mode ===== */
     TimelineRowMode m_rowMode;
+    TimelineViewMode m_viewMode;
 };

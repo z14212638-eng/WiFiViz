@@ -46,6 +46,24 @@
 #include <new>
 #include <vector>
 
+enum SharedRecordType : uint8_t
+{
+    SHM_RECORD_PPDU = 0,
+    SHM_RECORD_PHY_STATE = 1
+};
+
+enum SharedPhyState : uint8_t
+{
+    SHM_PHY_STATE_UNKNOWN = 0,
+    SHM_PHY_STATE_IDLE = 1,
+    SHM_PHY_STATE_CCA_BUSY = 2,
+    SHM_PHY_STATE_TX = 3,
+    SHM_PHY_STATE_RX = 4,
+    SHM_PHY_STATE_SWITCHING = 5,
+    SHM_PHY_STATE_SLEEP = 6,
+    SHM_PHY_STATE_OFF = 7
+};
+
 /**
  * @brief This struct contains the information of a PPDU that should be transmitted by Ns3 and
  * received by Qt
@@ -63,6 +81,7 @@ constexpr std::size_t MAX_PPDU_NUM = 1 << 20; // about 1 million PPDUs
 struct PPDU_Meta
 {
     ppdu_id_t id;
+    uint8_t record_type;
     uint16_t sta_id;
     uint8_t channel_id;
 
@@ -70,6 +89,7 @@ struct PPDU_Meta
     uint8_t mcs;
     uint16_t mpdu_aggregation;
     uint32_t size_bytes;
+    uint32_t throughput_mbps_x100;
 
     uint8_t sender[6];
     uint8_t receiver[6];
@@ -90,7 +110,12 @@ struct PPDU_Meta
     uint16_t snr_margin_db_x10; // SNR x10
     uint16_t snr_gap_db_x10;
 
-    uint8_t reserved[6];
+    uint8_t phy_state;
+    sim_time_ns_t phy_state_start_ns;
+    sim_time_ns_t phy_state_end_ns;
+    sim_time_ns_t phy_state_duration_ns;
+
+    uint8_t reserved[1];
 };
 
 /**
@@ -273,8 +298,17 @@ class SniffUtils : public Object
      * @param[in] ppdu
      * @param[in] tx_vector
      */
-    void Sniff_ppdu_begin(Ptr<const WifiPpdu> ppdu, const WifiTxVector& tx_vector);
+    void Sniff_ppdu_begin(uint16_t nodeId, Ptr<const WifiPpdu> ppdu, const WifiTxVector& tx_vector);
 
+    /**
+     * @brief Notify when the state changes
+     * 
+     */
+    void NotifyStateChange(uint16_t nodeId,
+                           uint8_t channelId,
+                           Time start,
+                           Time duration,
+                           WifiPhyState state);
     /**
      * @brief set the simulation time
      *
@@ -327,7 +361,7 @@ struct ActivePpdu
 extern std::optional<ActivePpdu> m_active_ppdu;
 
 //this function is used to append a PPDU to the ring buffer
-void AppendPpdu(RingBuffer* buffer, const PPDU_Meta& ppdu);
+uint32_t AppendPpdu(RingBuffer* buffer, const PPDU_Meta& ppdu);
 void ShmExample();
 } // namespace ns3
 

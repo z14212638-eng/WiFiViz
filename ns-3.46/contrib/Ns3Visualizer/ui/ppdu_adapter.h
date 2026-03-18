@@ -6,6 +6,16 @@
 class PpduAdapter
 {
 public:
+    static uint64_t MacToUInt64(const uint8_t mac[6])
+    {
+        uint64_t value = 0;
+        for (int i = 0; i < 6; ++i)
+        {
+            value = (value << 8) | mac[i];
+        }
+        return value;
+    }
+
     enum frame_type_t
     {
         WIFI_MAC_CTL_TRIGGER = 0,
@@ -126,24 +136,38 @@ public:
     static PpduVisualItem FromShm(const PPDU_Meta &m)
     {
         PpduVisualItem v{};
+        v.recordType = static_cast<RecordType>(m.record_type);
         v.id = m.id;
-        v.nodeId = m.node_id;
+        v.nodeId = m.sta_id;
         v.channel_number = m.channel_id;
-        v.sender = m.sender;
-        v.receiver = m.receiver;
+        v.rxState = static_cast<RxState>(m.rx_state);
+        v.failReason = m.rx_fail_reason;
+        v.phyState = static_cast<PhyStateKind>(m.phy_state);
+        v.phyStateStartNs = m.phy_state_start_ns;
+        v.phyStateEndNs = m.phy_state_end_ns;
+        v.phyStateDurationNs = m.phy_state_duration_ns;
+
+        if (v.recordType == RecordType::PhyState)
+        {
+            v.txStartNs = m.phy_state_start_ns;
+            v.txEndNs = m.phy_state_end_ns;
+            v.durationNs = m.phy_state_duration_ns;
+            v.frameType = "PHY_STATE";
+            return v;
+        }
+
+        v.sender = MacToUInt64(m.sender);
+        v.receiver = MacToUInt64(m.receiver);
         v.txStartNs = m.tx_start_ns;
         v.txEndNs = m.tx_end_ns;
         v.durationNs = m.tx_duration_ns;
         v.size = m.size_bytes;
+        v.throughputMbpsX100 = m.throughput_mbps_x100;
 
         v.mcs = (m.mcs == 255) ? -1 : m.mcs;
         v.mpduAggregation = m.mpdu_aggregation;
         v.snrGapDbX10 = m.snr_gap_db_x10;
-
         v.frameType = FrameTypeToString(static_cast<frame_type_t>(m.frame_type));
-
-        v.rxState = static_cast<RxState>(m.rx_state);
-        v.failReason = m.rx_fail_reason;
         return v;
     }
 };

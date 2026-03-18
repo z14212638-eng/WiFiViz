@@ -57,7 +57,7 @@ public:
 
     bool Msdu_aggregation = true;
     QString AMsdu_type = "AC_BE";
-    qint16 MaxAMsduSize = 65535;
+    quint16 MaxAMsduSize = 65535;
 
     bool Mpdu_aggregation = true;
     QString AMpdu_type = "AC_BE";

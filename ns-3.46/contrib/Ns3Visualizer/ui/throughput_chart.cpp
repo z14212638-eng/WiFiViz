@@ -5,6 +5,7 @@
 #include <QMouseEvent>
 #include <QToolTip>
 #include <QEnterEvent>
+#include <QTimer>
 #include <algorithm>
 #include <cmath>
 
@@ -39,10 +40,8 @@ ThroughputChartWidget::ThroughputChartWidget(QWidget *parent)
 
 void ThroughputChartWidget::setBucketDurationNs(uint64_t bucketNs)
 {
-    if (bucketNs == 0 || bucketNs == m_bucketNs)
-        return;
-    m_bucketNs = bucketNs;
-    reset();
+    if (bucketNs != 0)
+        m_bucketNs = bucketNs;
 }
 
 void ThroughputChartWidget::setMaxBuckets(int maxBuckets)
@@ -50,15 +49,27 @@ void ThroughputChartWidget::setMaxBuckets(int maxBuckets)
     if (maxBuckets <= 0 || maxBuckets == m_maxBuckets)
         return;
     m_maxBuckets = maxBuckets;
-    reset();
+
+    while (m_sampleTimeNs.size() > m_maxBuckets)
+    {
+        m_sampleTimeNs.removeFirst();
+        m_sampleThroughputX100.removeFirst();
+        m_sampleItems.removeFirst();
+    }
+
+    if (m_hoverIndex >= m_sampleTimeNs.size())
+        m_hoverIndex = -1;
+
+    updateScrollBars();
+    update();
 }
 
 void ThroughputChartWidget::reset()
 {
-    m_bucketStartNs.clear();
-    m_bucketBytes.clear();
-    m_bucketSample.clear();
-    m_latestNs = 0;
+    m_sampleTimeNs.clear();
+    m_sampleThroughputX100.clear();
+    m_sampleItems.clear();
+    m_updateQueued = false;
     m_hovering = false;
     m_hoverIndex = -1;
     m_viewStartIndex = 0;
@@ -71,45 +82,23 @@ void ThroughputChartWidget::reset()
     update();
 }
 
-void ThroughputChartWidget::ensureBucketFor(uint64_t ns)
+void ThroughputChartWidget::scheduleUpdate()
 {
-    if (m_bucketNs == 0)
+    if (m_updateQueued)
         return;
 
-    uint64_t bucketStart = (ns / m_bucketNs) * m_bucketNs;
-
-    if (m_bucketStartNs.isEmpty())
-    {
-        m_bucketStartNs.append(bucketStart);
-        m_bucketBytes.append(0);
-        m_bucketSample.append(PpduVisualItem{});
-        return;
-    }
-
-    uint64_t lastStart = m_bucketStartNs.last();
-
-    if (bucketStart > lastStart)
-    {
-        uint64_t next = lastStart + m_bucketNs;
-        while (next <= bucketStart)
-        {
-            m_bucketStartNs.append(next);
-            m_bucketBytes.append(0);
-            m_bucketSample.append(PpduVisualItem{});
-            next += m_bucketNs;
-        }
-    }
-
-    while (m_bucketStartNs.size() > m_maxBuckets)
-    {
-        m_bucketStartNs.removeFirst();
-        m_bucketBytes.removeFirst();
-        m_bucketSample.removeFirst();
-    }
+    m_updateQueued = true;
+    QTimer::singleShot(16, this, [this]() {
+        m_updateQueued = false;
+        update();
+    });
 }
 
 void ThroughputChartWidget::appendPpdu(const PpduVisualItem &ppdu)
 {
+    if (ppdu.recordType != RecordType::Ppdu)
+        return;
+
     uint64_t ns = ppdu.txEndNs;
     if (ns == 0)
         return;
@@ -118,23 +107,18 @@ void ThroughputChartWidget::appendPpdu(const PpduVisualItem &ppdu)
     if (m_hScroll)
         wasAtEnd = (m_hScroll->value() == m_hScroll->maximum());
 
-    m_latestNs = std::max(m_latestNs, ns);
-    ensureBucketFor(ns);
+    m_sampleTimeNs.append(ns);
+    m_sampleThroughputX100.append(ppdu.throughputMbpsX100);
+    m_sampleItems.append(ppdu);
 
-    if (m_bucketStartNs.isEmpty())
-        return;
-
-    uint64_t bucketStart = (ns / m_bucketNs) * m_bucketNs;
-    uint64_t firstStart = m_bucketStartNs.first();
-
-    if (bucketStart < firstStart)
-        return;
-
-    int index = int((bucketStart - firstStart) / m_bucketNs);
-    if (index >= 0 && index < m_bucketBytes.size())
+    while (m_sampleTimeNs.size() > m_maxBuckets)
     {
-        m_bucketBytes[index] += ppdu.size;
-        m_bucketSample[index] = ppdu;
+        m_sampleTimeNs.removeFirst();
+        m_sampleThroughputX100.removeFirst();
+        m_sampleItems.removeFirst();
+        m_viewStartIndex = std::max(0, m_viewStartIndex - 1);
+        if (m_hoverIndex >= 0)
+            m_hoverIndex = std::max(-1, m_hoverIndex - 1);
     }
 
     updateScrollBars();
@@ -142,19 +126,14 @@ void ThroughputChartWidget::appendPpdu(const PpduVisualItem &ppdu)
     if (wasAtEnd && m_hScroll)
         m_hScroll->setValue(m_hScroll->maximum());
 
-    update();
+    scheduleUpdate();
 }
 
-double ThroughputChartWidget::bucketMbps(int index) const
+double ThroughputChartWidget::sampleMbps(int index) const
 {
-    if (index < 0 || index >= m_bucketBytes.size() || m_bucketNs == 0)
+    if (index < 0 || index >= m_sampleThroughputX100.size())
         return 0.0;
-
-    double sec = double(m_bucketNs) / 1e9;
-    if (sec <= 0)
-        return 0.0;
-
-    return (m_bucketBytes[index] * 8.0) / sec / 1e6;
+    return m_sampleThroughputX100[index] / 100.0;
 }
 
 void ThroughputChartWidget::paintEvent(QPaintEvent *)
@@ -178,13 +157,14 @@ void ThroughputChartWidget::paintEvent(QPaintEvent *)
     if (plot.width() <= 10 || plot.height() <= 10)
         return;
 
-    // Compute max throughput
-    double maxMbps = 0.0;
-    int nTotal = m_bucketBytes.size();
     int start = m_viewStartIndex;
     int end = viewEndIndex();
+    if (start < 0 || end < start)
+        return;
+
+    double maxMbps = 0.0;
     for (int i = start; i <= end; ++i)
-        maxMbps = std::max(maxMbps, bucketMbps(i));
+        maxMbps = std::max(maxMbps, sampleMbps(i));
 
     if (maxMbps <= 0.01)
         maxMbps = 1.0;
@@ -217,14 +197,14 @@ void ThroughputChartWidget::paintEvent(QPaintEvent *)
     }
 
     // X-axis labels (time)
-    if (!m_bucketStartNs.isEmpty())
+    if (!m_sampleTimeNs.isEmpty())
     {
         int n = std::max(1, end - start + 1);
         int step = std::max(1, n / 4);
         for (int i = 0; i < n; i += step)
         {
             int idx = start + i;
-            uint64_t tMs = m_bucketStartNs[idx] / 1000000;
+            uint64_t tMs = m_sampleTimeNs[idx] / 1000000;
             int x = plot.left() + (plot.width() * i) / std::max(1, n - 1);
             p.drawText(x - 12, plot.bottom() + 16, QString::number(tMs) + " ms");
         }
@@ -239,13 +219,13 @@ void ThroughputChartWidget::paintEvent(QPaintEvent *)
     p.drawText(legendRect.left() + 24, legendRect.top() + 12, "Throughput");
 
     // Line
-    if (m_bucketBytes.size() >= 2)
+    const int n = std::max(1, end - start + 1);
+    if (n >= 2)
     {
         QPainterPath path;
-        int n = std::max(1, end - start + 1);
         for (int i = 0; i < n; ++i)
         {
-            double v = bucketMbps(start + i);
+            double v = sampleMbps(start + i);
             double ratio = std::clamp(v / maxMbps, 0.0, 1.0);
             int x = plot.left() + (plot.width() * i) / std::max(1, n - 1);
             int y = plot.bottom() - int(plot.height() * ratio);
@@ -258,12 +238,21 @@ void ThroughputChartWidget::paintEvent(QPaintEvent *)
         p.setPen(QPen(kLine, 2));
         p.drawPath(path);
     }
+    else if (n == 1)
+    {
+        double v = sampleMbps(start);
+        double ratio = std::clamp(v / maxMbps, 0.0, 1.0);
+        int x = plot.left();
+        int y = plot.bottom() - int(plot.height() * ratio);
+        p.setPen(Qt::NoPen);
+        p.setBrush(kLine);
+        p.drawEllipse(QPoint(x, y), 4, 4);
+    }
 
     // Hover highlight
-    if (m_hovering && m_hoverIndex >= 0 && m_hoverIndex < m_bucketBytes.size())
+    if (m_hovering && m_hoverIndex >= 0 && m_hoverIndex < m_sampleTimeNs.size())
     {
-        int n = std::max(1, end - start + 1);
-        double v = bucketMbps(m_hoverIndex);
+        double v = sampleMbps(m_hoverIndex);
         double ratio = std::clamp(v / maxMbps, 0.0, 1.0);
         int rel = m_hoverIndex - start;
         int x = plot.left() + (plot.width() * rel) / std::max(1, n - 1);
@@ -281,22 +270,22 @@ void ThroughputChartWidget::paintEvent(QPaintEvent *)
 
 int ThroughputChartWidget::indexFromX(int x, int plotLeft, int plotWidth) const
 {
-    if (m_bucketStartNs.isEmpty() || plotWidth <= 0)
+    if (m_sampleTimeNs.isEmpty() || plotWidth <= 0)
         return -1;
 
     double ratio = double(x - plotLeft) / double(plotWidth);
     ratio = std::clamp(ratio, 0.0, 1.0);
     int n = std::max(1, viewEndIndex() - m_viewStartIndex + 1);
     int idx = int(std::round(ratio * (n - 1)));
-    int count = int(m_bucketStartNs.size());
+    int count = int(m_sampleTimeNs.size());
     return std::clamp(m_viewStartIndex + idx, 0, count - 1);
 }
 
-uint64_t ThroughputChartWidget::bucketStartNs(int index) const
+uint64_t ThroughputChartWidget::sampleTimeNs(int index) const
 {
-    if (index < 0 || index >= m_bucketStartNs.size())
+    if (index < 0 || index >= m_sampleTimeNs.size())
         return 0;
-    return m_bucketStartNs[index];
+    return m_sampleTimeNs[index];
 }
 
 void ThroughputChartWidget::mouseMoveEvent(QMouseEvent *event)
@@ -314,7 +303,7 @@ void ThroughputChartWidget::mouseMoveEvent(QMouseEvent *event)
     {
         m_hovering = false;
         m_hoverIndex = -1;
-        update();
+        scheduleUpdate();
         return;
     }
 
@@ -324,15 +313,15 @@ void ThroughputChartWidget::mouseMoveEvent(QMouseEvent *event)
 
     if (m_hoverIndex >= 0)
     {
-        double mbps = bucketMbps(m_hoverIndex);
-        uint64_t tMs = bucketStartNs(m_hoverIndex) / 1000000;
+        double mbps = sampleMbps(m_hoverIndex);
+        uint64_t tMs = sampleTimeNs(m_hoverIndex) / 1000000;
 
         // compute point position for tooltip
         double maxMbps = 0.0;
         int start = m_viewStartIndex;
         int end = viewEndIndex();
         for (int i = start; i <= end; ++i)
-            maxMbps = std::max(maxMbps, bucketMbps(i));
+            maxMbps = std::max(maxMbps, sampleMbps(i));
         if (maxMbps <= 0.01)
             maxMbps = 1.0;
         maxMbps /= std::max(1.0, m_yZoom);
@@ -346,13 +335,14 @@ void ThroughputChartWidget::mouseMoveEvent(QMouseEvent *event)
                           .arg(tMs)
                           .arg(mbps, 0, 'f', 2);
 
-        if (m_hoverIndex < m_bucketSample.size())
+        if (m_hoverIndex < m_sampleItems.size())
         {
-            const auto &s = m_bucketSample[m_hoverIndex];
+            const auto &s = m_sampleItems[m_hoverIndex];
             if (s.txStartNs != 0 || s.txEndNs != 0)
             {
-                tip += QString("\nNode: %1\nSender: 0x%2\nReceiver: 0x%3")
+                tip += QString("\nNode: %1\nRealtime: %2 Mbps\nSender: 0x%3\nReceiver: 0x%4")
                            .arg(s.nodeId)
+                           .arg(s.throughputMbpsX100 / 100.0, 0, 'f', 2)
                            .arg(QString::number(s.sender, 16).toUpper())
                            .arg(QString::number(s.receiver, 16).toUpper());
             }
@@ -361,7 +351,7 @@ void ThroughputChartWidget::mouseMoveEvent(QMouseEvent *event)
         QToolTip::showText(mapToGlobal(QPoint(px + 10, py - 10)), tip, this);
     }
 
-    update();
+    scheduleUpdate();
 }
 
 void ThroughputChartWidget::enterEvent(QEnterEvent *)
@@ -393,16 +383,16 @@ void ThroughputChartWidget::resizeEvent(QResizeEvent *)
 
 int ThroughputChartWidget::visibleCountForWidth(int plotWidth) const
 {
-    int approx = std::max(20, plotWidth / 6);
+    int approx = std::max(64, plotWidth / 2);
     return std::max(1, approx);
 }
 
 int ThroughputChartWidget::viewEndIndex() const
 {
-    if (m_bucketBytes.isEmpty())
+    if (m_sampleTimeNs.isEmpty())
         return -1;
     int end = m_viewStartIndex + m_viewCount - 1;
-    return std::clamp(end, 0, int(m_bucketBytes.size()) - 1);
+    return std::clamp(end, 0, int(m_sampleTimeNs.size()) - 1);
 }
 
 void ThroughputChartWidget::updateScrollBars()
@@ -411,7 +401,7 @@ void ThroughputChartWidget::updateScrollBars()
         return;
 
     int plotWidth = width() - 50 - 12 - m_vScroll->sizeHint().width();
-    int count = int(m_bucketBytes.size());
+    int count = int(m_sampleTimeNs.size());
     m_viewCount = std::min(count, visibleCountForWidth(plotWidth));
 
     int maxStart = std::max(0, count - m_viewCount);

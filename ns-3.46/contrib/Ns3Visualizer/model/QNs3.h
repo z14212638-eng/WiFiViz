@@ -43,7 +43,6 @@
 #include <new>
 #include <vector>
 
-
 namespace ns3
 {
 /**
@@ -57,6 +56,8 @@ namespace ns3
  * @param velocity the velocity of the node (m/s)
  *
  */
+
+
 struct Mobility
 {
     bool set;

@@ -1,6 +1,5 @@
 #include "qt_ppdu_reader.h"
 #include "ppdu_adapter.h"
-#include "visualizer_config.h"
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <QThread>
 #include <QDebug>
@@ -40,8 +39,6 @@ void QtPpduReader::run()
 
     // Do not drain here to avoid dropping early PPDU data
 
-    uint64_t ppduCount = 0;
-
     while (m_running)
     {
         try
@@ -53,15 +50,15 @@ void QtPpduReader::run()
                 lock, boost::posix_time::milliseconds(100),
                 [&] { return m_ring->read_index != m_ring->write_index || !m_running; });
 
-            // 超时且没有数据，检查 ns-3 是否已退出
-            if (!m_running && m_ring->read_index == m_ring->write_index)
+            if (!hasData)
             {
-                qDebug() << "[PPDU] ns-3 ended and ring buffer empty, exiting reader";
-                break;
-            }
+                // 超时且没有数据，检查 ns-3 是否已退出
+                if (!m_running && m_ring->read_index == m_ring->write_index)
+                {
+                    qDebug() << "[PPDU] ns-3 ended and ring buffer empty, exiting reader";
+                    break;
+                }
 
-            if (m_ring->read_index == m_ring->write_index)
-            {
                 // 没有新数据，继续循环
                 continue;
             }
@@ -71,16 +68,6 @@ void QtPpduReader::run()
             m_ring->read_index++;
 
             lock.unlock();
-
-            ppduCount++;
-
-            // 自动采样
-            if (!g_ppduViewConfig.preciseMode.load())
-            {
-                int rate = g_ppduViewConfig.sampleRate.load();
-                if (rate > 1 && (ppduCount % rate != 0))
-                    continue;
-            }
 
             auto visual = PpduAdapter::FromShm(shmPpdu);
             emit ppduReady(visual);
