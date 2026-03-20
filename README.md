@@ -34,8 +34,11 @@ This project focuses on **PPDU timelines, throughput plots, and custom simulatio
 
 - > Besides the PPDU-level analysis, this tool also provides a Throughput plot to help you analyze the possible bottlenecks of the wireless network.
   ![demo_2](doc/gif/plot.gif)
----
 
+
+- > We also provide a StateTimeline to show the state changes of teh PHY layer. 
+  ![demo_state](doc/gif/state.gif)
+  ---
 ## ✨ Features
 
 - 📊 **PPDU Timeline View**  
@@ -43,6 +46,9 @@ This project focuses on **PPDU timelines, throughput plots, and custom simulatio
 
 - 🧠 **Lane-based Overlap Layout**  
   Overlapping PPDUs are split into lanes to avoid occlusion, with overlap indicators.
+
+- **Time-based PHY-state Timeline**
+  PHY-states including Idle,CCA_BUSY,TX,RX are presented in a timeline view and seperated and emphasized by color. 
 
 - 🖱 **Rich Interaction**
   - Hover to inspect PPDU details (frame type, duration, fail-reason, node MAC, etc.)

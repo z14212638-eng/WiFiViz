@@ -34,6 +34,9 @@
 
 - > 除了 PPDU 级分析之外，本工具还提供吞吐曲线，帮助你定位无线网络中的潜在瓶颈。
   ![demo_2](gif/plot.gif)
+
+- > 我们同时也提供"基于时间的PHY层状态图",包含IDLE,CCA_BUSY,TX,RX等状态随sim时间的变化.
+- ![demo_state](gif/state.gif)
 ---
 
 ## ✨ 功能特性
