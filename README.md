@@ -1,230 +1,163 @@
-# Ns-3 PPDU Visualizer
+# ns3-Visualizer
 
-[English](doc/README_en.md) | [中文](doc/README_ch.md)
+`ns3-Visualizer` is a contrib module for ns-3 that provides a Qt-based workflow for Wi-Fi simulation configuration and PHY/MAC PPDU-level trace visualization.  This repository intentionally contains only the contrib module, not the full ns-3 source tree.
 
-A Qt-based visualization tool for **ns-3 PHY/MAC PPDU activity**, designed to provide **interactive, time-aligned PPDU-level analysis** for wireless simulations.
+![Overview](img/overview.gif)
 
-This repository provides a **research-oriented visualization frontend** that complements ns-3 experiments by transforming low-level PHY/MAC events into **clean, readable timelines and statistics**. It is optimized for **debugging, analysis, and reporting** in wireless systems research, rather than for general-purpose network animation.
+## Repository Scope
 
-### ✅ Key Highlights
-- **PPDU-first analysis**: focused on PHY/MAC PPDU behavior and collisions.
-- **Time-accurate inspection**: nanosecond-level time alignment with zoomable timelines.
-- **Interactive diagnosis**: hover/drag/zoom/select workflows designed for fast triage.
-- **Scenario extensibility**: support for custom simulation scenarios and project files.
+This repository is meant to be copied into an existing ns-3 checkout:
 
-### 🎯 Typical Use Cases
-- Investigate **collision patterns** or contention anomalies.
-- Compare **per-node throughput** under different configurations.
-- Perform **time-windowed utilization analysis** for bottleneck diagnosis.
-- Generate **figures for papers/reports** from PPDU timelines.
-
-![Demo](doc/gif/Default.gif)
-This project focuses on **PPDU timelines, throughput plots, and custom simulation scenarios**, supporting:
-- Node-centric PPDU transmissions
-- Channel-centric PPDU transmissions
-- PPDU collision indication
-- Frame type inspection
-- Time range selection with auto-zoom
-- Throughput / channel utilization statistics
-
-> this shows the PPDU-Timeline and Throughput plots of a wireless scenario in ns-3 (examples/wireless/wifi-txop-aggregation.cc)
- ![demo](doc/gif/display_1.gif)
-
-
-
-- > Besides the PPDU-level analysis, this tool also provides a Throughput plot to help you analyze the possible bottlenecks of the wireless network.
-  ![demo_2](doc/gif/plot.gif)
-
-
-- > We also provide a StateTimeline to show the state changes of teh PHY layer. 
-  ![demo_state](doc/gif/state.gif)
-  ---
-## ✨ Features
-
-- 📊 **PPDU Timeline View**  
-  Visualize PPDU transmissions along the time axis in **node view** and **channel view**.
-
-- 🧠 **Lane-based Overlap Layout**  
-  Overlapping PPDUs are split into lanes to avoid occlusion, with overlap indicators.
-
-- **Time-based PHY-state Timeline**
-  PHY-states including Idle,CCA_BUSY,TX,RX are presented in a timeline view and seperated and emphasized by color. 
-
-- 🖱 **Rich Interaction**
-  - Hover to inspect PPDU details (frame type, duration, fail-reason, node MAC, etc.)
-  - > when you hover your mouse over a triangle which represents a PPDU, you can see the detailed information of the PPDU, including the frame type, duration, node MAC, etc.The channel would be highlighted too.
- ![demo](doc/img/demo.jpg)
-It is intended as a **research and debugging tool**, not a full simulator or NetAnim replacement.
-  - Left-drag to pan the timeline
-  - Mouse wheel to zoom and adjust time granularity
-  - Right-drag to select a time range and compute statistics
-  - > ![demo_drag](doc/gif/plot_drag.gif)
-
-- 📐 **Time Range Analysis**
-  For a selected interval (requires full-data mode):
-  - Channel busy time
-  - Idle time
-  - Utilization
-  - Throughput (Mbps)
-  - > ![demo_range](doc/img/utiliazaion.jpg)
-
-- 🪟 **Overlay UI (NetAnim-style)**
-  Semi-transparent overlays for:
-  - PPDU info
-  - Legend
-  - Statistics
-
-- 🖼 **Export as Image**  
-  Save the current timeline view as PNG/JPG.
-
----
-
-## 🧩 How It Works (Conceptual Pipeline)
-1. **ns-3 simulation** produces PHY/MAC PPDU trace outputs (JSON/CSV).
-2. **Parser layer** converts raw trace data into PPDU objects.
-3. **Layout engine** assigns lanes and computes overlaps.
-4. **Qt UI layer** renders the timeline, overlays, and plots.
-5. **Interaction layer** provides zoom/selection/statistics.
-
-This design keeps the visualization **decoupled from simulation**, enabling reproducible analysis across multiple experiments.
-
----
-## Design your own scenario(Build your simulation scene by yourself)
-
-
-> If you don't want to create a scenario by writing code, you can try the **New(Experimental)** button in the **Simulation Mode Selection** page.But just as the text suggests, this feature is still experimental and may not work as expected in some special cases.
-We are now working hard to perfect this DIY simulation mode,the key problems lies in the configuration of flow settings and the mobility model. We will keep this tool updated as soon as possible.
-- > Any issue report or suggestion is welcome!
-![demo_diy](doc/img/generalSettings.jpg)
-> Settings for APs and STAs are modifiable in the setting page.
-- ![config](doc/img/config.jpg)
-## Load from File
-
-> This feature allows you to load a custom scenario from a project file (.nsproj). The project file can be generated by the Ns3Visualizer UI.
-> The project file contains all the necessary information for the simulation, including the topology, mobility model, and flow settings.
-The Ns3Visualizer UI will load the project file and display the corresponding simulation scenario.
-
-> ⚠️ **Note**  
-> When using the AppImage version, the relative positions of the Qt UI and the ns-3 simulation are not fixed. The user needs to manually set the paths in the UI.
-
----
-
-## 🔧 Dependencies
-
-- **Qt 6 and the related tool chains** (Qt 5 may work with minor tweaks)
-- **C++17** or newer
-- **ns-3.46** or higher
-- Linux environment
-
-> ⚠️ **Note**  
-> This repo does **not** ship the full ns-3 source. Only contrib modules are included. Please download the full ns-3 source from the [ns-3 official site](https://www.nsnam.org/).
-
----
-
-## 🚀 Quick Run (Prebuilt)
-
-- **AppImage** (desktop)  
-  Run Ns3Visualizer.AppImage to launch the UI.
-
-- **Headless executable package**  
-
-```bash
-# place Ns3Visualizer/ under contrib/
-./ns3 configure
-./ns3 build
-./build/Ns3VisualizerApp
-
+```text
+ns-3.46/
+└── contrib/
+    └── Ns3Visualizer/
 ```
 
-> The Qt app only handles visualization; it does **not** build or run ns-3.
-> If you want to know more about how to use this tool, please refer to the [User Guide](doc/Tutorial_en.md) or [用户指南](doc/Tutorial_ch.md).
+It does not include:
 
----
+- the ns-3 core source tree,
+- generated `scratch/` programs,
+- local `.codex` configuration,
+- AppImage packaging output,
+- `contrib/nr` or any unrelated contrib module.
 
-## 🧭 Recommended Workflow
-1. **Generate traces** in ns-3 (enable PPDU/PHY/MAC tracing).
-2. **Load the trace** in the visualizer UI.
-3. **Inspect** timeline and throughput plots.
-4. **Select a time range** to compute utilization statistics.
-5. **Export images** for reports or debugging.
+## Features
 
----
+- GUI-driven Wi-Fi scenario configuration for buildings, APs, STAs, mobility, PHY/MAC parameters, EDCA/QoS, antenna settings, aggregation, RTS/CTS, and traffic flows.
+- JSON-backed scenario storage and standalone ns-3 C++ script generation.
+- Shared-memory transport for real-time PPDU, PHY-state, MAC-delay, and RX-outcome records.
+- Interactive visualization for PPDU timing, channel state, PHY state, throughput, latency, frame composition, node throughput, RX outcome, and MCS distribution.
+- Timeline zooming, panning, range selection, PPDU detail inspection, and process-output viewing.
 
-## 📥 Data Input
+![Configuration Dashboard](img/configuration-dashboard.png)
 
-PPDU data typically comes from ns-3 trace hooks or custom logs (JSON/CSV).
-Each PPDU record usually includes:
-- Node/AP identifier
-- Start/end time (ns)
-- Frame type
-- Aggregated MPDU count
-- Payload size
+![Visualization Dashboard](img/visualization-dashboard.gif)
 
-### ✅ Recommended Data Quality
-- Ensure timestamps are strictly monotonic within each node.
-- Provide explicit frame types for reliable legend grouping.
-- Use consistent units (ns recommended) to avoid scaling errors.
+## Directory Layout
 
----
+```text
+contrib/Ns3Visualizer/
+├── CMakeLists.txt
+├── model/                  # ns-3 model classes and trace collection logic
+├── helper/                 # helper APIs for enabling visualizer tracing
+├── examples/               # example ns-3 programs
+├── test/                   # ns-3 test skeleton
+├── Simulation/Default/     # built-in example scenarios for the GUI
+├── doc/                    # ns-3 module documentation
+├── utils/doc/              # extended user notes
+└── ui/                     # Qt visualizer frontend and script generator
+```
 
-## 🧪 Project Status
+## Requirements
 
-- ✔ PPDU timeline and overlays
-- ✔ Time-range statistics
-- ✔ Interactive operations
-- ⏳ Complex traffic configuration
-- ⏳ MLO
+- ns-3.46 or a compatible recent ns-3 version
+- CMake and a C++17-capable compiler for the Qt frontend
+- C++23-capable compiler support for the ns-3 contrib module build settings
+- Qt 6 preferred; Qt 5.15 may work with minor adjustments
+- Boost Interprocess
+- Linux is the primary tested environment
 
----
+## Installation
 
-## 🎯 Design Goals
+Clone this repository and copy the contrib module into an ns-3 source tree:
 
-- Focus on PHY/MAC behavior rather than topology animation
-- Nanosecond-level time alignment
-- Research-friendly and extensible
+```bash
+git clone https://github.com/z14212638-eng/Ns3-based-Visualization.git
+cp -r Ns3-based-Visualization/contrib/Ns3Visualizer /path/to/ns-3.46/contrib/
+```
 
----
+Then configure and build ns-3:
 
-## 📜 License
+```bash
+cd /path/to/ns-3.46
+./ns3 configure
+./ns3 build
+```
 
-Released under the **MIT License**.
+The build adds the `Ns3Visualizer` contrib module and builds the Qt frontend target when Qt is available.
 
----
+## Running
 
-## 🙋 Authors
+Launch the full GUI:
 
-- **Kai Zhang**  
-  u202414527@hust.edu.cn
-- **Chengxiang Mi**  
-  michengxiang@hust.edu.cn
+```bash
+cd /path/to/ns-3.46
+./build/Ns3VisualizerApp
+```
 
----
+The GUI can create or load a project, generate a standalone scratch script, build it, run it with visualizer tracing enabled, and display the resulting PPDU-level records.
 
-## ⭐ Acknowledgements
+For timeline-only mode, which is useful when an ns-3 script launches the viewer:
 
-- ns-3 Simulator
-- NetAnim (UI inspiration)
-- Qt Framework
+```bash
+./build/Ns3VisualizerApp --timeline-only
+```
 
-> If you use this project in research, coursework, or tooling, a citation or mention would be appreciated.
+## Scenario Configuration Workflow
 
----
+![Scenario Builder](img/scenario-builder.gif)
 
-## 🤝 Contributing
-Contributions are welcome, especially for:
-- Additional trace adapters (custom log formats)
-- Improved scenario configuration
-- UI/UX improvements for heavy-scale simulations
-- Documentation and reproducibility guides
+1. Configure the building and global simulation duration.
+2. Add AP and STA nodes and adjust their positions in the layout view.
+3. Configure node-specific PHY/MAC, mobility, antenna, aggregation, RTS/CTS, and EDCA parameters.
+4. Add traffic flows between selected AP/STA endpoints.
+5. Generate the standalone ns-3 script and run the simulation from the GUI.
 
-Please open issues or pull requests with clear steps to reproduce and expected behavior.
+## Visualization Workflow
 
----
+![PPDU Timeline](img/ppdu-timeline.gif)
 
-## 📌 Citation (Suggested)
-If you use this tool in academic work, please cite it as a software artifact and mention the authors.
+The visualizer consumes shared-memory records emitted by ns-3 and updates several linked views:
 
----
+- PPDU timeline for individual transmissions and overlaps.
+- Channel-state timeline for IDLE/BUSY/COLLISION intervals.
+- PHY-state timeline for IDLE/TX/RX/CCA_BUSY and related states.
+- Throughput and delay charts for performance diagnosis.
+- Frame composition, node throughput, RX-outcome, and MCS-distribution charts for statistical summaries.
 
-## 📮 Contact
-For questions or collaboration, feel free to reach out to the authors listed above.
+![Statistics Panels](img/statistics-panels.png)
+
+## Enabling Tracing in Custom Scripts
+
+Generated scripts already include the required visualizer hooks.  For custom scripts, include the helper and enable visualizer tracing on the Wi-Fi devices:
+
+```cpp
+#include "ns3/QNs3-helper.h"
+
+// after AP and STA NetDeviceContainers are created
+NetDeviceContainer allDevices = QNs3Helper::MergeDevices(apDevices, staDevices);
+QNs3Helper::ConfigureVisualizerSampling(/* precise */ true, /* rough */ 1);
+Ptr<SniffUtils> sniffer =
+    QNs3Helper::MaybeEnableVisualizer(enableVisualizer, allDevices, simulationTime, true);
+```
+
+Then run the simulation with:
+
+```bash
+./ns3 run "your-script --enable-visualizer=1 --precise=1 --rough=1"
+```
+
+## Image Assets
+
+The README references the following files.  They are intentionally expected under `img/` so screenshots and GIFs can be updated without changing Markdown:
+
+```text
+img/overview.gif
+img/configuration-dashboard.png
+img/visualization-dashboard.gif
+img/scenario-builder.gif
+img/ppdu-timeline.gif
+img/statistics-panels.png
+```
+
+## Development Notes
+
+- Keep generated projects under ns-3 runtime directories, not in this repository.
+- Do not commit AppImage extraction directories such as `AppDir/` or `squashfs-root/`.
+- Do not commit local `.codex`, build caches, or generated scratch programs.
+- This repository should remain scoped to `contrib/Ns3Visualizer`.
+
+## License
+
+This project follows the ns-3 contrib-module style.  See the source files and the ns-3 license terms for details.

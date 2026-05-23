@@ -1,0 +1,182 @@
+/* =========================
+   Global Base - 工业浅灰 + 高可读
+========================= */
+
+* {
+    font-family: "Inter", "Source Han Sans SC", "Noto Sans CJK SC";
+    font-weight: 650;
+}
+
+QWidget {
+    background-color: #F2F3F5;   /* 主背景：浅灰 */
+    color: #2E2E2E;              /* 深灰文字 */
+}
+
+/* =========================
+   Text
+========================= */
+
+QLabel {
+    color: #2E2E2E;
+    font-size: 22px;
+}
+
+QLabel:disabled {
+    color: #A0A0A0;
+}
+
+/* =========================
+   Buttons
+========================= */
+
+QPushButton {
+    background-color: #E0E2E5;
+    color: #2E2E2E;
+    border: 1px solid #B0B0B0;
+    border-radius: 6px;
+    font-size: 24px;
+    padding: 4px 8px;
+}
+
+QPushButton:hover {
+    background-color: #D5D7DB;
+}
+
+QPushButton:pressed {
+    background-color: #C8CCD0;
+}
+
+QPushButton:disabled {
+    background-color: #E6E6E6;
+    color: #A0A0A0;
+    border-color: #D0D0D0;
+}
+
+/* =========================
+   Input / SpinBox / ComboBox
+========================= */
+
+QLineEdit,
+QTextEdit,
+QPlainTextEdit,
+QSpinBox,
+QDoubleSpinBox,
+QComboBox {
+    background-color: #FFFFFF;
+    color: #2E2E2E;
+    font-size: 20px;
+    border: 1px solid #B0B0B0;
+    border-radius: 4px;
+    padding: 3px 6px;
+}
+
+QLineEdit:focus,
+QTextEdit:focus,
+QComboBox:focus,
+QSpinBox:focus,
+QDoubleSpinBox:focus {
+    border: 1px solid #4A90E2;   /* 蓝色高亮（稍柔和） */
+}
+
+/* ComboBox 下拉列表 */
+QComboBox QAbstractItemView {
+    background-color: #FFFFFF;
+    selection-background-color: #4A90E2;
+    selection-color: #FFFFFF;
+}
+
+/* =========================
+   Tables / Views
+========================= */
+
+QTableWidget,
+QTreeView,
+QListView {
+    background-color: #FFFFFF;
+    alternate-background-color: #F7F8FA;
+    color: #2E2E2E;
+    gridline-color: #D0D0D0;
+    selection-background-color: #4A90E2;
+    selection-color: #FFFFFF;
+}
+
+QHeaderView::section {
+    background-color: #E6E8EB;
+    color: #2E2E2E;
+    padding: 4px;
+    border: 1px solid #C0C0C0;
+}
+
+/* =========================
+   CheckBox
+========================= */
+
+QCheckBox {
+    font-size: 22px;
+}
+
+QCheckBox::indicator {
+    width: 20px;
+    height: 20px;
+    border: 1px solid #AFAFAF;
+    border-radius: 2px;
+    background-color: #FFFFFF;
+}
+
+QCheckBox::indicator:hover {
+    border: 2px solid #4A90E2;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #4A90E2;
+    border: 1px solid #4A90E2;
+}
+
+/* =========================
+   Tabs
+========================= */
+
+QTabWidget::pane {
+    border: 1px solid #C0C0C0;
+    border-radius: 4px;
+    top: -1px;
+    background-color: #FFFFFF;
+}
+
+QTabBar::tab {
+    background-color: #DADDE1;
+    color: #6B6F75;
+    font-size: 19px;
+    font-weight: 800;
+    padding: 8px 20px;
+
+    border: 1px solid #DADDE1;
+    border-bottom: none;
+}
+
+QTabBar::tab:hover {
+    color: #2E2E2E;
+    background-color: #E4E6E9;
+}
+
+QTabBar::tab:selected {
+    background-color: #FFFFFF;
+    color: #000000;
+
+    border: 1px solid #C0C0C0;
+    border-bottom: 1px solid #FFFFFF;
+}
+
+/* =========================
+   Text Browser
+========================= */
+
+QTextBrowser {
+    font-size: 18px;
+}
+
+/* Scrollbar fix */
+QTextEdit QScrollBar::add-line,
+QTextEdit QScrollBar::sub-line {
+    height: 0px;
+}

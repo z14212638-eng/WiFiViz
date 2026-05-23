@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/">
+        <file>icons/folder.svg</file>
+        <file>qss/light.qss</file>
+        <file>qss/dark.qss</file>
+    </qresource>
+</RCC>

@@ -1,7 +1,0 @@
-<!DOCTYPE RCC>
-<RCC>
-  <qresource prefix="/">
-    <file>qss/dark.qss</file>
-    <file>icons/folder.svg</file>
-  </qresource>
-</RCC>

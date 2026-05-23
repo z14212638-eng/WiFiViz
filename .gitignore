@@ -1,18 +1,36 @@
-*.so
-*.a
-*.exe
+.codex/
+.cache/
+.vscode/
 
+# Build outputs and local CMake/qmake files.
 build/
 build-cmake/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+compile_commands.json
 *_autogen/
-*.o
-*.user
 moc_*
 ui_*.h
+*.o
+*.a
+*.so
+*.exe
+*.user
 
+# Local packaging artifacts.
+*.AppImage
+*.tar.xz
 *.tar.bz2
-# ns-3.46/*
-!ns-3.46/contrib/
-!ns-3.46/contrib/*
-.vscode
-.github
+AppDir/
+squashfs-root/
+runtime-x86_64
+contrib/Ns3Visualizer/ui/Ns3Visualizer
+
+# Generated simulation output.
+scratch/
+contrib/Ns3Visualizer/Simulation/Designed/
+
+# Keep this repository scoped to Ns3Visualizer.
+ns-3.46/
+contrib/nr/
