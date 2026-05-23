@@ -28,7 +28,7 @@ ns-3 core source code.
 - [Module Layout](#module-layout)
 - [Image and GIF Checklist](#image-and-gif-checklist)
 - [Troubleshooting](#troubleshooting)
-- [Development Notes](#development-notes)
+- [To Developers](#to-developers)
 
 ## Repository Scope
 
@@ -47,6 +47,8 @@ This GitHub repository should contain:
 ├── README.md
 ├── README.zh-CN.md
 ├── img/
+├── tools/
+│   └── visualizer.cc
 └── contrib/
     └── Ns3Visualizer/
 ```
@@ -116,10 +118,17 @@ Copy only the contrib module into your ns-3 tree:
 cp -r Ns3-based-Visualization/contrib/Ns3Visualizer /path/to/ns-3.46/contrib/
 ```
 
-The final path must be:
+Copy the full-GUI launcher into ns-3 `scratch/`:
+
+```bash
+cp Ns3-based-Visualization/tools/visualizer.cc /path/to/ns-3.46/scratch/visualizer.cc
+```
+
+The final paths must be:
 
 ```text
 /path/to/ns-3.46/contrib/Ns3Visualizer
+/path/to/ns-3.46/scratch/visualizer.cc
 ```
 
 ## Build
@@ -147,10 +156,18 @@ GUI to convert JSON scenario files into a standalone ns-3 C++ script.
 Full GUI mode is intended for users who want to create or edit a simulation from
 the graphical interface.
 
-Start the application from the ns-3 root:
+The standard way to start full GUI mode is through ns-3:
 
 ```bash
 cd /path/to/ns-3.46
+./ns3 run visualizer
+```
+
+The `visualizer` launcher is the `scratch/visualizer.cc` file copied during
+installation. It starts `build/Ns3VisualizerApp` from the ns-3 root. If you only
+need to start the Qt application directly, the fallback command is:
+
+```bash
 ./build/Ns3VisualizerApp
 ```
 
@@ -188,6 +205,16 @@ Important behavior:
 One-command mode is intended for users who already have an ns-3 script and want
 to launch the timeline viewer directly from `./ns3 run`.
 
+The simplest command form is:
+
+```bash
+./ns3 run "<target> --enable-visualizer=1"
+```
+
+This form assumes the target script already parses an `enable-visualizer`
+command-line argument and passes that value to
+`QNs3Helper::MaybeEnableVisualizer(...)`.
+
 Your script must include the Ns3Visualizer helper and enable tracing:
 
 ```cpp
@@ -209,7 +236,8 @@ Ptr<SniffUtils> sniffer =
                                       /* launchViewer */ true);
 ```
 
-Expose a command-line flag in your script:
+Expose a command-line flag in your script if you want visualization to be
+controlled from the terminal:
 
 ```cpp
 bool enableVisualizer = false;
@@ -223,12 +251,40 @@ cmd.AddValue("rough", "Sample one PPDU out of rough records when precise=false",
 cmd.Parse(argc, argv);
 ```
 
-Run a scratch script:
+Then run a scratch script:
 
 ```bash
 cd /path/to/ns-3.46
 ./ns3 run "your-script --enable-visualizer=1 --precise=1 --rough=1"
 ```
+
+The command-line flag is not strictly required. If your script sets
+`enableVisualizer` to `true` by default and still calls
+`QNs3Helper::MaybeEnableVisualizer(enableVisualizer, ..., true)`, then this is
+also valid:
+
+```cpp
+bool enableVisualizer = true;
+bool precise = true;
+uint32_t rough = 1;
+
+QNs3Helper::ConfigureVisualizerSampling(precise, rough);
+Ptr<SniffUtils> sniffer =
+    QNs3Helper::MaybeEnableVisualizer(enableVisualizer,
+                                      allDevices,
+                                      simulationTime,
+                                      /* launchViewer */ true);
+```
+
+Run it without extra arguments:
+
+```bash
+./ns3 run your-script
+```
+
+Use the command-line form when you want the same script to run both with and
+without visualization. Use the hard-coded/default-enabled form when the script
+is dedicated to visualizer experiments.
 
 Run in sampled mode for heavy simulations:
 
@@ -574,6 +630,8 @@ contrib/Ns3Visualizer/
     ├── process_terminal.*     # output viewer
     └── utils/
         └── ns3-script-generator.cc
+tools/
+└── visualizer.cc              # scratch launcher for `./ns3 run visualizer`
 ```
 
 ## Image and GIF Checklist
@@ -636,7 +694,8 @@ Check the output window. Common causes are:
 - no AP or no STA was configured,
 - no traffic flow starts during the simulation,
 - the generated script failed to build,
-- the script did not run with `--enable-visualizer=1`.
+- visualizer tracing was not enabled by either `--enable-visualizer=1` or a
+  script-side `enableVisualizer = true` default.
 
 ### One-command mode runs but no viewer appears
 
@@ -657,9 +716,11 @@ Use sampled visualization:
 
 Increase `rough` to reduce the number of displayed PPDU samples.
 
-## Development Notes
+## To Developers
 
 - Keep source changes under `contrib/Ns3Visualizer`.
+- Keep `tools/visualizer.cc` synchronized with the expected full-GUI launcher
+  behavior, because users copy it to `scratch/visualizer.cc`.
 - Do not commit generated projects under `Simulation/Designed/`.
 - Do not commit generated scratch scripts.
 - Do not commit packaging output or AppImage extraction folders.

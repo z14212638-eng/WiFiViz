@@ -23,7 +23,7 @@
 - [模块目录说明](#模块目录说明)
 - [图片和 GIF 清单](#图片和-gif-清单)
 - [常见问题](#常见问题)
-- [开发注意事项](#开发注意事项)
+- [对开发者的建议](#对开发者的建议)
 
 ## 仓库范围
 
@@ -42,6 +42,8 @@ GitHub 仓库结构应该保持为：
 ├── README.md
 ├── README.zh-CN.md
 ├── img/
+├── tools/
+│   └── visualizer.cc
 └── contrib/
     └── Ns3Visualizer/
 ```
@@ -106,10 +108,17 @@ git clone https://github.com/z14212638-eng/Ns3-based-Visualization.git
 cp -r Ns3-based-Visualization/contrib/Ns3Visualizer /path/to/ns-3.46/contrib/
 ```
 
+把全量 GUI 启动器复制到 ns-3 的 `scratch/`：
+
+```bash
+cp Ns3-based-Visualization/tools/visualizer.cc /path/to/ns-3.46/scratch/visualizer.cc
+```
+
 最终路径必须是：
 
 ```text
 /path/to/ns-3.46/contrib/Ns3Visualizer
+/path/to/ns-3.46/scratch/visualizer.cc
 ```
 
 ## 构建
@@ -135,10 +144,16 @@ build/ns3-script-generator
 
 全量 GUI 模式适合从界面创建、配置、运行和分析仿真。
 
-在 ns-3 根目录启动：
+全量 GUI 模式的标准启动方式是通过 ns-3 启动：
 
 ```bash
 cd /path/to/ns-3.46
+./ns3 run visualizer
+```
+
+这里的 `visualizer` 对应安装时复制到 `scratch/visualizer.cc` 的启动器。它会从 ns-3 根目录启动 `build/Ns3VisualizerApp`。如果只是想直接启动 Qt 程序，也可以使用备用命令：
+
+```bash
 ./build/Ns3VisualizerApp
 ```
 
@@ -169,6 +184,14 @@ cd /path/to/ns-3.46
 
 一键脚本模式适合已经有 ns-3 脚本、只想通过一条 `./ns3 run` 命令启动仿真和可视化的用户。
 
+最简单的命令形式是：
+
+```bash
+./ns3 run "<target> --enable-visualizer=1"
+```
+
+这种写法要求目标脚本已经解析 `enable-visualizer` 命令行参数，并把该值传给 `QNs3Helper::MaybeEnableVisualizer(...)`。
+
 脚本需要包含 helper 并启用可视化记录：
 
 ```cpp
@@ -189,7 +212,7 @@ Ptr<SniffUtils> sniffer =
                                       /* launchViewer */ true);
 ```
 
-脚本中建议暴露命令行参数：
+如果希望从终端控制是否启用可视化，建议在脚本中暴露命令行参数：
 
 ```cpp
 bool enableVisualizer = false;
@@ -203,12 +226,37 @@ cmd.AddValue("rough", "Sample one PPDU out of rough records when precise=false",
 cmd.Parse(argc, argv);
 ```
 
-运行 scratch 脚本：
+然后运行 scratch 脚本：
 
 ```bash
 cd /path/to/ns-3.46
 ./ns3 run "your-script --enable-visualizer=1 --precise=1 --rough=1"
 ```
+
+命令行参数并不是严格必要的。如果你的脚本里默认设置
+`enableVisualizer = true`，并且仍然调用
+`QNs3Helper::MaybeEnableVisualizer(enableVisualizer, ..., true)`，那么也可以直接运行：
+
+```cpp
+bool enableVisualizer = true;
+bool precise = true;
+uint32_t rough = 1;
+
+QNs3Helper::ConfigureVisualizerSampling(precise, rough);
+Ptr<SniffUtils> sniffer =
+    QNs3Helper::MaybeEnableVisualizer(enableVisualizer,
+                                      allDevices,
+                                      simulationTime,
+                                      /* launchViewer */ true);
+```
+
+此时命令可以简化为：
+
+```bash
+./ns3 run your-script
+```
+
+如果同一个脚本既需要普通运行，也需要可视化运行，推荐使用命令行参数。如果这个脚本就是专门用于可视化实验，直接在脚本里默认启用也可以。
 
 大型仿真可以用采样模式：
 
@@ -502,6 +550,8 @@ contrib/Ns3Visualizer/
     ├── process_terminal.*     # 输出窗口
     └── utils/
         └── ns3-script-generator.cc
+tools/
+└── visualizer.cc              # 用于 `./ns3 run visualizer` 的 scratch 启动器
 ```
 
 ## 图片和 GIF 清单
@@ -563,7 +613,7 @@ cd /path/to/ns-3.46
 - 没有 AP 或没有 STA；
 - 没有在仿真时间内启动的业务流；
 - 生成脚本构建失败；
-- 脚本没有使用 `--enable-visualizer=1` 运行。
+- 脚本没有通过 `--enable-visualizer=1` 或脚本内默认 `enableVisualizer = true` 启用可视化记录。
 
 ### 一键模式运行了，但没有弹出 viewer
 
@@ -584,9 +634,10 @@ cd /path/to/ns-3.46
 
 增大 `rough` 可以减少可视化采样数量。
 
-## 开发注意事项
+## 对开发者的建议
 
 - 源码变更应保持在 `contrib/Ns3Visualizer` 内；
+- 保持 `tools/visualizer.cc` 与全量 GUI 启动方式一致，因为用户会把它复制到 `scratch/visualizer.cc`；
 - 不要提交 `Simulation/Designed/`；
 - 不要提交生成的 scratch 脚本；
 - 不要提交打包产物或 AppImage 解压目录；
