@@ -114,6 +114,10 @@ cp -r Ns3-based-Visualization/contrib/Ns3Visualizer /path/to/ns-3.46/contrib/
 cp Ns3-based-Visualization/tools/visualizer.cc /path/to/ns-3.46/scratch/visualizer.cc
 ```
 
+这一步是有意设计的。`./ns3 run visualizer` 能工作，是因为 ns-3 会自动把
+`scratch/visualizer.cc` 当作名为 `visualizer` 的用户脚本 target。如果不使用
+scratch 启动器，却仍然想支持同样的命令，就需要修改 ns-3 自身源码或构建/运行规则，例如增加内置 runner target，或者修改 `./ns3 run` 发现非 scratch 可执行文件的方式。本项目的原则是不对 ns-3 源码做破坏性修改，而是提供插件式 contrib 可视化模块，再配合一个可选的 scratch 启动器。
+
 最终路径必须是：
 
 ```text
@@ -151,7 +155,7 @@ cd /path/to/ns-3.46
 ./ns3 run visualizer
 ```
 
-这里的 `visualizer` 对应安装时复制到 `scratch/visualizer.cc` 的启动器。它会从 ns-3 根目录启动 `build/Ns3VisualizerApp`。如果只是想直接启动 Qt 程序，也可以使用备用命令：
+这里的 `visualizer` 对应安装时复制到 `scratch/visualizer.cc` 的启动器。它被放在 `scratch/` 中，是为了复用 ns-3 标准用户脚本机制来构建和运行，不需要修改 ns-3 内部代码。这个启动器只负责从 ns-3 根目录启动 `build/Ns3VisualizerApp`。如果只是想直接启动 Qt 程序，也可以使用备用命令：
 
 ```bash
 ./build/Ns3VisualizerApp

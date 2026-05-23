@@ -124,6 +124,15 @@ Copy the full-GUI launcher into ns-3 `scratch/`:
 cp Ns3-based-Visualization/tools/visualizer.cc /path/to/ns-3.46/scratch/visualizer.cc
 ```
 
+This extra copy step is intentional. `./ns3 run visualizer` works because ns-3
+automatically treats `scratch/visualizer.cc` as a user script target named
+`visualizer`. Without this scratch launcher, supporting the same command would
+require changing ns-3's own source tree or build/run rules, for example by
+adding a built-in runner target or modifying how `./ns3 run` discovers
+non-scratch executables. This project avoids destructive changes to ns-3 and
+keeps Ns3Visualizer as a plugin-style contrib module plus an optional scratch
+launcher.
+
 The final paths must be:
 
 ```text
@@ -164,8 +173,10 @@ cd /path/to/ns-3.46
 ```
 
 The `visualizer` launcher is the `scratch/visualizer.cc` file copied during
-installation. It starts `build/Ns3VisualizerApp` from the ns-3 root. If you only
-need to start the Qt application directly, the fallback command is:
+installation. It is deliberately placed in `scratch/` so ns-3 can build and run
+it through the normal user-script mechanism. The launcher only starts
+`build/Ns3VisualizerApp` from the ns-3 root; it does not modify ns-3 internals.
+If you only need to start the Qt application directly, the fallback command is:
 
 ```bash
 ./build/Ns3VisualizerApp
