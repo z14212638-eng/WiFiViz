@@ -25,12 +25,12 @@ ui_*.h
 AppDir/
 squashfs-root/
 runtime-x86_64
-contrib/Ns3Visualizer/ui/Ns3Visualizer
+ui/WiFiViz
+ui/WiFiVizApp
 
 # Generated simulation output.
 scratch/
-contrib/Ns3Visualizer/Simulation/Designed/
+Simulation/Designed/
 
-# Keep this repository scoped to Ns3Visualizer.
+# Keep this repository scoped to WiFiViz.
 ns-3.46/
-contrib/nr/

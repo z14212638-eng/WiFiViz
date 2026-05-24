@@ -14,16 +14,14 @@ main(int argc, char* argv[])
     cmd.Parse(argc, argv);
 
     namespace fs = std::filesystem;
-
     fs::path cwd = fs::current_path();
-    fs::path appPath = cwd / "build" / "Ns3VisualizerApp";
+    fs::path appPath = cwd / "build" / "WiFiVizApp";
     if (!fs::exists(appPath))
     {
-        appPath = cwd / "Ns3VisualizerApp";
+        appPath = cwd / "WiFiVizApp";
     }
 
-    const std::string command = appPath.string();
-    const int ret = std::system(command.c_str());
+    const int ret = std::system(appPath.string().c_str());
     if (ret != 0)
     {
         std::cerr << "Failed to launch visualizer app: " << appPath << std::endl;
