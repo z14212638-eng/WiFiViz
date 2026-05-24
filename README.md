@@ -1,14 +1,13 @@
-# ns3-Visualizer
+# WiFiViz
 
-**Language:** English | [简体中文](README.zh-CN.md)
-
-`ns3-Visualizer` is an ns-3 contrib module for building, running, and analyzing
+`WiFiViz` is an ns-3 contrib module for building, running, and analyzing
 Wi-Fi simulations through a Qt-based graphical workflow. It combines scenario
 configuration, JSON persistence, script generation, ns-3 execution, shared-memory
 trace collection, and interactive PHY/MAC visualization in one tool.
 
-This repository provides the visualizer contrib module and a small scratch
-launcher. Users install it into an existing ns-3 source tree.
+This repository is the standalone `WiFiViz` contrib module. A clone or
+release archive unpacks directly to the module directory expected under an
+existing ns-3 source tree.
 
 ![Project overview](img/visualization-dashboard.png)
 
@@ -19,8 +18,9 @@ launcher. Users install it into an existing ns-3 source tree.
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Build](#build)
-- [Run Mode 1: Full GUI Mode](#run-mode-1-full-gui-mode)
-- [Run Mode 2: One-Command Script Mode](#run-mode-2-one-command-script-mode)
+- [Run Mode 1: Simple Script Mode](#run-mode-1-simple-script-mode)
+- [Run Mode 2: Parameter Script Mode](#run-mode-2-parameter-script-mode)
+- [Run Mode 3: Full GUI Mode](#run-mode-3-full-gui-mode)
 - [UI Guide](#ui-guide)
 - [Visualization Guide](#visualization-guide)
 - [Project and Data Files](#project-and-data-files)
@@ -32,18 +32,23 @@ launcher. Users install it into an existing ns-3 source tree.
 After cloning this repository, the important paths are:
 
 ```text
-Ns3-based-Visualization/
+WiFiViz/
+├── CMakeLists.txt
 ├── README.md
-├── README.zh-CN.md
-├── img/
+├── doc/
+├── examples/
+├── helper/
 ├── tools/
 │   └── visualizer.cc
-└── contrib/
-    └── Ns3Visualizer/
+├── model/
+├── test/
+├── ui/
+└── Simulation/
 ```
 
-During installation, copy `contrib/Ns3Visualizer` into your ns-3 `contrib/`
-directory and copy `tools/visualizer.cc` into ns-3 `scratch/`.
+Install the repository itself as `/path/to/ns-3.46/contrib/WiFiViz`.
+The optional full-GUI launcher is stored inside the module at
+`tools/visualizer.cc` and can be copied into ns-3 `scratch/`.
 
 ## Main Capabilities
 
@@ -54,7 +59,7 @@ directory and copy `tools/visualizer.cc` into ns-3 `scratch/`.
   and STA JSON files before generating the ns-3 script.
 - Automatic standalone C++ script generation under ns-3 `scratch/`.
 - Full GUI workflow that generates, builds, runs, and visualizes a simulation.
-- One-command script workflow for users who already have their own ns-3 script.
+- Simple script workflow for users who already have their own ns-3 script.
 - Shared-memory trace transport from ns-3 to the Qt application.
 - PPDU-level timeline visualization, channel-state view, PHY-state view, detail
   inspection, throughput charts, delay charts, frame composition, node
@@ -90,22 +95,19 @@ sudo apt install -y qtbase5-dev
 
 ## Installation
 
-Clone this repository outside ns-3:
+Clone this repository directly into the ns-3 `contrib/` directory. The clone
+name should be `WiFiViz` so ns-3 sees the expected module path:
 
 ```bash
-git clone https://github.com/z14212638-eng/Ns3-based-Visualization.git
+cd /path/to/ns-3.46/contrib
+git clone <repo-url> WiFiViz
 ```
 
-Copy only the contrib module into your ns-3 tree:
+Copy the full-GUI launcher from the module into ns-3 `scratch/`:
 
 ```bash
-cp -r Ns3-based-Visualization/contrib/Ns3Visualizer /path/to/ns-3.46/contrib/
-```
-
-Copy the full-GUI launcher into ns-3 `scratch/`:
-
-```bash
-cp Ns3-based-Visualization/tools/visualizer.cc /path/to/ns-3.46/scratch/visualizer.cc
+cd /path/to/ns-3.46
+cp contrib/WiFiViz/tools/visualizer.cc scratch/visualizer.cc
 ```
 
 This extra copy step is intentional. `./ns3 run visualizer` works because ns-3
@@ -114,13 +116,13 @@ automatically treats `scratch/visualizer.cc` as a user script target named
 require changing ns-3's own source tree or build/run rules, for example by
 adding a built-in runner target or modifying how `./ns3 run` discovers
 non-scratch executables. This project avoids destructive changes to ns-3 and
-keeps Ns3Visualizer as a plugin-style contrib module plus an optional scratch
+keeps WiFiViz as a plugin-style contrib module plus an optional scratch
 launcher.
 
 The final paths must be:
 
 ```text
-/path/to/ns-3.46/contrib/Ns3Visualizer
+/path/to/ns-3.46/contrib/WiFiViz
 /path/to/ns-3.46/scratch/visualizer.cc
 ```
 
@@ -137,167 +139,184 @@ cd /path/to/ns-3.46
 The build should produce:
 
 ```text
-build/Ns3VisualizerApp
-build/ns3-script-generator
+build/WiFiVizApp
+build/wifiviz-script-generator
 ```
 
-`Ns3VisualizerApp` is the Qt frontend. `ns3-script-generator` is used by the
+`WiFiVizApp` is the Qt frontend. `wifiviz-script-generator` is used by the
 GUI to convert JSON scenario files into a standalone ns-3 C++ script.
 
-## Run Mode 1: Full GUI Mode
+## Run Mode 1: Simple Script Mode
 
-Full GUI mode is intended for users who want to create or edit a simulation from
-the graphical interface.
+Simple mode is the recommended path for most users. You keep writing your ns-3
+script in the normal ns-3 style, then add a small WiFiViz block near the end of
+the script. All WiFiViz options are written directly as function parameters in
+the script, so you do not need to add WiFiViz command-line parsing.
 
-The standard way to start full GUI mode is through ns-3:
+First include the aggregate header:
+
+```cpp
+#include "ns3/wifiviz.h"
+```
+
+After your Wi-Fi AP and STA `NetDeviceContainer`s have been created, merge the
+devices you want to trace. Usually this means all AP devices plus all STA
+devices:
+
+```cpp
+using namespace ns3;
+
+// Existing containers from your script.
+NetDeviceContainer apDevices = ...;
+NetDeviceContainer staDevices = ...;
+
+NetDeviceContainer allDevices = WiFiVizHelper::MergeDevices(apDevices, staDevices);
+```
+
+Then pass `allDevices`, `enableViz`, the simulation duration, and
+`launchViewer` directly into `MaybeEnableVisualizer`:
+
+```cpp
+bool enableViz = true;
+double simulationTimeSeconds = 10.0;
+bool launchViewer = true;
+
+Ptr<SniffUtils> sniffer =
+    WiFiVizHelper::MaybeEnableVisualizer(enableViz,
+                                         allDevices,
+                                         simulationTimeSeconds,
+                                         launchViewer);
+```
+
+Meaning of the parameters:
+
+- `enableViz`: set to `true` to collect WiFiViz records.
+- `allDevices`: the AP/STA Wi-Fi devices to trace.
+- `simulationTimeSeconds`: total simulation duration in seconds.
+- `launchViewer`: set to `true` to open the timeline viewer automatically.
+
+If you want sampled visualization for a large simulation, configure sampling
+directly before `MaybeEnableVisualizer`:
+
+```cpp
+bool precise = false;
+uint32_t rough = 10;
+WiFiVizHelper::ConfigureVisualizerSampling(precise, rough);
+```
+
+Then run the script normally. No WiFiViz command-line arguments are needed:
 
 ```bash
 cd /path/to/ns-3.46
-./ns3 run visualizer
+./ns3 run your-target
 ```
 
-The `visualizer` launcher is the `scratch/visualizer.cc` file copied during
-installation. It is deliberately placed in `scratch/` so ns-3 can build and run
-it through the normal user-script mechanism. The launcher only starts
-`build/Ns3VisualizerApp` from the ns-3 root; it does not modify ns-3 internals.
-If you only need to start the Qt application directly, the fallback command is:
+Use simple mode when the script is dedicated to visualization or when you do
+not need to switch WiFiViz on and off from the terminal.
 
-```bash
-./build/Ns3VisualizerApp
-```
+## Run Mode 2: Parameter Script Mode
 
-Workflow:
-
-1. Select the ns-3 directory on the welcome page.
-2. Open the scenario selection page.
-3. Either select a built-in/default scene or enter the configuration dashboard.
-4. Configure building, APs, STAs, mobility, PHY/MAC parameters, and traffic
-   flows.
-5. Click `Generate`.
-6. The GUI writes JSON files, runs `build/ns3-script-generator`, creates a
-   `scratch/*.cc` script, runs `./ns3 build`, then automatically runs:
-
-```bash
-./ns3 run "<generated-target> --enable-visualizer=1 --precise=1 --rough=1"
-```
-
-The exact generated target name depends on the project name and timestamp. The
-GUI prints the final command in the output window.
-
-Important behavior:
-
-- Full GUI mode disables the script-side auto viewer launch internally and uses
-  the already-open GUI result page instead.
-- The result page starts its shared-memory reader before the simulation process
-  begins.
-- If no PPDU records are received, the result page reports that sniffing failed
-  or that the selected script did not emit visualizer records.
-
-## Run Mode 2: One-Command Script Mode
-
-One-command mode is intended for users who already have an ns-3 script and want
-to launch the timeline viewer directly from `./ns3 run`.
-
-The simplest command form is:
-
-```bash
-./ns3 run "<target> --enable-visualizer=1"
-```
-
-This form assumes the target script already parses an `enable-visualizer`
-command-line argument and passes that value to
-`QNs3Helper::MaybeEnableVisualizer(...)`.
-
-Your script must include the Ns3Visualizer helper and enable tracing:
+Parameter mode is useful when you want the same script to run with or without
+WiFiViz from the terminal. In this mode, your script defines command-line
+parameters and then passes the parsed values into the same WiFiViz helper
+functions.
 
 ```cpp
-#include "ns3/QNs3-helper.h"
+#include "ns3/wifiviz.h"
 
-using namespace ns3;
-
-// after AP and STA NetDeviceContainers are created
-NetDeviceContainer allDevices = QNs3Helper::MergeDevices(apDevices, staDevices);
-
-// precise=true records every PPDU sample. Set precise=false and rough>1 for
-// sampled visualization on large simulations.
-QNs3Helper::ConfigureVisualizerSampling(/* precise */ true, /* rough */ 1);
-
-Ptr<SniffUtils> sniffer =
-    QNs3Helper::MaybeEnableVisualizer(enableVisualizer,
-                                      allDevices,
-                                      simulationTime,
-                                      /* launchViewer */ true);
-```
-
-Expose a command-line flag in your script if you want visualization to be
-controlled from the terminal:
-
-```cpp
-bool enableVisualizer = false;
+bool enableWiFiViz = false;
+bool launchViewer = true;
 bool precise = true;
 uint32_t rough = 1;
+double simulationTimeSeconds = 10.0;
 
 CommandLine cmd(__FILE__);
-cmd.AddValue("enable-visualizer", "Enable Ns3Visualizer timeline capture", enableVisualizer);
+cmd.AddValue("enable-wifiviz", "Enable WiFiViz timeline capture", enableWiFiViz);
+cmd.AddValue("launch-viewer", "Launch the WiFiViz timeline viewer", launchViewer);
 cmd.AddValue("precise", "Use precise PPDU visualization", precise);
 cmd.AddValue("rough", "Sample one PPDU out of rough records when precise=false", rough);
+cmd.AddValue("simulation-time", "Simulation duration in seconds", simulationTimeSeconds);
 cmd.Parse(argc, argv);
 ```
 
-Then run a scratch script:
+After creating the AP/STA devices, use the parsed values:
+
+```cpp
+NetDeviceContainer allDevices = WiFiVizHelper::MergeDevices(apDevices, staDevices);
+
+WiFiVizHelper::ConfigureVisualizerSampling(precise, rough);
+
+Ptr<SniffUtils> sniffer =
+    WiFiVizHelper::MaybeEnableVisualizer(enableWiFiViz,
+                                         allDevices,
+                                         simulationTimeSeconds,
+                                         launchViewer);
+```
+
+Run it with parameters:
 
 ```bash
 cd /path/to/ns-3.46
-./ns3 run "your-script --enable-visualizer=1 --precise=1 --rough=1"
+./ns3 run "your-target --enable-wifiviz=1 --launch-viewer=1 --precise=1 --rough=1 --simulation-time=10"
 ```
-
-The command-line flag is not strictly required. If your script sets
-`enableVisualizer` to `true` by default and still calls
-`QNs3Helper::MaybeEnableVisualizer(enableVisualizer, ..., true)`, then this is
-also valid:
-
-```cpp
-bool enableVisualizer = true;
-bool precise = true;
-uint32_t rough = 1;
-
-QNs3Helper::ConfigureVisualizerSampling(precise, rough);
-Ptr<SniffUtils> sniffer =
-    QNs3Helper::MaybeEnableVisualizer(enableVisualizer,
-                                      allDevices,
-                                      simulationTime,
-                                      /* launchViewer */ true);
-```
-
-Run it without extra arguments:
-
-```bash
-./ns3 run your-script
-```
-
-Use the command-line form when you want the same script to run both with and
-without visualization. Use the hard-coded/default-enabled form when the script
-is dedicated to visualizer experiments.
 
 Run in sampled mode for heavy simulations:
 
 ```bash
-./ns3 run "your-script --enable-visualizer=1 --precise=0 --rough=10"
+./ns3 run "your-target --enable-wifiviz=1 --launch-viewer=1 --precise=0 --rough=10 --simulation-time=10"
 ```
 
 What happens:
 
-- `QNs3Helper::MaybeEnableVisualizer(..., true)` starts
-  `build/Ns3VisualizerApp --timeline-only` automatically.
+- `WiFiVizHelper::MaybeEnableVisualizer(..., true)` starts
+  `build/WiFiVizApp --timeline-only` automatically.
 - The script writes visualizer records to shared memory.
 - The timeline-only viewer reads the records and shows the result dashboard.
 
-You can also start the viewer manually if needed:
+## Run Mode 3: Full GUI Mode
+
+Full mode starts the WiFiViz GUI first and lets the GUI generate a scratch
+script from the configuration pages. This mode is useful for quickly trying the
+graphical configuration workflow.
+
+Copy the launcher into ns-3 `scratch/`:
 
 ```bash
-./build/Ns3VisualizerApp --timeline-only
-./ns3 run "your-script --enable-visualizer=1 --precise=1 --rough=1"
+cd /path/to/ns-3.46
+cp contrib/WiFiViz/tools/visualizer.cc scratch/visualizer.cc
 ```
+
+Start the GUI through ns-3:
+
+```bash
+./ns3 run visualizer
+```
+
+The `visualizer` launcher is the `scratch/visualizer.cc` file copied above.
+ns-3 builds it as a normal scratch target named `visualizer`. The launcher only
+starts `build/WiFiVizApp` from the ns-3 root; it does not modify ns-3 internals.
+If you only need to start the Qt application directly, use:
+
+```bash
+./build/WiFiVizApp
+```
+
+Full mode workflow:
+
+1. Select the ns-3 directory on the welcome page.
+2. Configure a simple Wi-Fi scenario in the GUI.
+3. Click `Generate`.
+4. The GUI writes JSON files, runs `build/wifiviz-script-generator`, creates a
+   `scratch/*.cc` script, runs `./ns3 build`, and then runs the generated
+   target with WiFiViz enabled.
+
+Current limitation: the full-mode script generator currently generates only
+simple scripts. For complex experiments, custom helpers, advanced traffic
+patterns, or nonstandard ns-3 workflows, the generated script may contain
+unexpected errors or incomplete logic. For reproducible research scripts, the
+recommended workflow is to write your own ns-3 script using
+`examples/wifiviz-basic-example.cc` as a template, then use simple mode to
+visualize the final result.
 
 ## UI Guide
 
@@ -324,9 +343,9 @@ Use this page to:
 The scenario page provides three entry points:
 
 - `Simple`: built-in simple examples under
-  `contrib/Ns3Visualizer/Simulation/Default/Simple`.
+  `contrib/WiFiViz/Simulation/Default/Simple`.
 - `Complex`: built-in complex examples under
-  `contrib/Ns3Visualizer/Simulation/Default/Complex`.
+  `contrib/WiFiViz/Simulation/Default/Complex`.
 - `Scratch`: readable `*.cc` files under ns-3 `scratch/`.
 
 The page shows a preview image and Markdown description when a default scene
@@ -590,7 +609,7 @@ the `./ns3 build`, `./ns3 run`, generator, stdout, and stderr logs.
 Full GUI mode writes project data under:
 
 ```text
-contrib/Ns3Visualizer/Simulation/Designed/Designed_<timestamp>/
+contrib/WiFiViz/Simulation/Designed/Designed_<timestamp>/
 ├── GeneralJson/
 │   └── General.json
 ├── ApConfigJson/
@@ -611,15 +630,16 @@ them for later inspection or delete them after the experiment.
 ## Module Layout
 
 ```text
-contrib/Ns3Visualizer/
+contrib/WiFiViz/
 ├── CMakeLists.txt
 ├── model/
+│   ├── wifiviz.h              # public aggregate header for user scripts
 │   ├── QNs3.*                 # JSON config structures and parsing helpers
 │   └── SniffUtils.*           # ns-3 trace collection and shared-memory writer
 ├── helper/
-│   └── QNs3-helper.*          # helper APIs for Wi-Fi config and visualizer launch
-├── examples/                  # example ns-3 scripts using the helper
-├── test/                      # ns-3 test skeleton
+│   └── QNs3-helper.*          # implementation behind WiFiVizHelper
+├── examples/                  # minimal user-script template
+├── test/                      # ns-3 unit tests
 ├── Simulation/Default/        # built-in simple and complex GUI scenes
 ├── doc/                       # ns-3 module documentation
 ├── utils/doc/                 # additional notes
@@ -635,14 +655,14 @@ contrib/Ns3Visualizer/
     ├── *_chart.*              # throughput, delay, RX, MCS, and statistics charts
     ├── process_terminal.*     # output viewer
     └── utils/
-        └── ns3-script-generator.cc
-tools/
-└── visualizer.cc              # scratch launcher for `./ns3 run visualizer`
+        └── wifiviz-script-generator.cc
+└── tools/
+    └── visualizer.cc          # copy to scratch/ for `./ns3 run visualizer`
 ```
 
 ## Troubleshooting
 
-### `build/Ns3VisualizerApp` does not exist
+### `build/WiFiVizApp` does not exist
 
 Run:
 
@@ -654,7 +674,7 @@ cd /path/to/ns-3.46
 
 Check whether Qt development packages are installed.
 
-### `build/ns3-script-generator` does not exist
+### `build/wifiviz-script-generator` does not exist
 
 The generator is built together with the Qt frontend. Re-run `./ns3 build` and
 check the CMake output for Qt or compiler errors.
@@ -667,16 +687,16 @@ Check the output window. Common causes are:
 - no AP or no STA was configured,
 - no traffic flow starts during the simulation,
 - the generated script failed to build,
-- visualizer tracing was not enabled by either `--enable-visualizer=1` or a
-  script-side `enableVisualizer = true` default.
+- visualizer tracing was not enabled by either `--enable-wifiviz=1` or a
+  script-side `enableWiFiViz = true` default.
 
-### One-command mode runs but no viewer appears
+### Script mode runs but no viewer appears
 
 Check that:
 
-- `build/Ns3VisualizerApp` exists,
-- the script calls `QNs3Helper::MaybeEnableVisualizer(..., true)`,
-- the environment variable `NS3_VISUALIZER_DISABLE_VIEWER` is not set to `1`,
+- `build/WiFiVizApp` exists,
+- the script calls `WiFiVizHelper::MaybeEnableVisualizer(..., true)`,
+- the environment variable `WIFIVIZ_DISABLE_VIEWER` is not set to `1`,
 - you are running from the ns-3 root directory.
 
 ### Very large simulations are slow
@@ -684,12 +704,13 @@ Check that:
 Use sampled visualization:
 
 ```bash
-./ns3 run "your-script --enable-visualizer=1 --precise=0 --rough=10"
+./ns3 run "your-target --enable-wifiviz=1 --precise=0 --rough=10"
 ```
 
 Increase `rough` to reduce the number of displayed PPDU samples.
 
 ## License
 
-This project follows the ns-3 contrib-module style. See the source files and
-the ns-3 license terms for details.
+Unless otherwise noted, this project is licensed under the MIT License. Some
+ns-3-derived example files keep their original GPL-2.0-only SPDX headers. The
+license set is GPLv2-compatible for ns-3 app-store contribution purposes.
