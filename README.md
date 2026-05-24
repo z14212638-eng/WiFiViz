@@ -70,28 +70,70 @@ The optional full-GUI launcher is stored inside the module at
 
 ## Requirements
 
-Tested target environment:
+WiFiViz is developed and tested as an ns-3.46 contrib module on Linux. The
+repository must be installed as `contrib/WiFiViz` inside an ns-3 source tree;
+some GUI paths and helper launch commands intentionally use that module path.
 
-- Linux.
-- ns-3.46.
-- CMake supported by the ns-3 build system.
-- C++23-capable compiler for the ns-3 contrib module.
-- C++17-capable compiler for the Qt frontend.
-- Qt 6 is preferred. Qt 5.15 may work if available in your environment.
-- Boost Interprocess.
+Required build environment:
 
-Typical Ubuntu packages:
+- Linux with a graphical desktop session for the Qt viewer. X11 or Wayland is
+  fine. For headless SSH/server runs, use script mode with `launchViewer=false`
+  or set up display forwarding before launching `WiFiVizApp`.
+- ns-3.46 source tree configured with CMake.
+- CMake 3.16 or newer. The Qt frontend uses CMake AUTOMOC, AUTOUIC, and AUTORCC.
+- A C++23-capable compiler for the ns-3 contrib module and scratch launcher.
+  GCC with libstdc++ is the recommended toolchain.
+- A C++17-capable compiler for the Qt frontend and
+  `wifiviz-script-generator`. In practice this is normally the same compiler.
+
+Required ns-3 modules:
+
+- `core`, `network`, `internet`, `mobility`, `wifi`, `applications`,
+  `buildings`, `csma`, `point-to-point`, and `aodv`.
+
+Required third-party libraries and tools:
+
+- Qt Core, Gui, and Widgets development packages. Qt 6 is preferred; Qt 5.15 is
+  the fallback supported by the CMake files.
+- Boost headers, specifically Boost Interprocess, for shared-memory transport
+  between ns-3 and the Qt viewer.
+- nlohmann JSON headers and CMake package. The module parser includes
+  `nlohmann/json.hpp`, and the script generator looks for
+  `nlohmann_json >= 3.2.0`.
+- POSIX shell tools: `/bin/bash`, `sh`, and `nohup`. The GUI uses `bash -lc`
+  when running ns-3 commands, and script mode uses `tools/wifiviz-hidden.sh` to
+  launch the timeline viewer in the background.
+- Standard ns-3 build tools such as `git`, `python3`, `pkg-config`, CMake, and
+  Ninja or Make.
+
+Typical Ubuntu 22.04/24.04 packages for Qt 6:
 
 ```bash
 sudo apt update
-sudo apt install -y build-essential cmake ninja-build qt6-base-dev libboost-all-dev
+sudo apt install -y \
+  build-essential git python3 pkg-config cmake ninja-build \
+  qt6-base-dev qt6-base-dev-tools \
+  libboost-all-dev nlohmann-json3-dev
 ```
 
-If your distribution only provides Qt 5:
+If your distribution only provides Qt 5.15:
 
 ```bash
-sudo apt install -y qtbase5-dev
+sudo apt install -y \
+  build-essential git python3 pkg-config cmake ninja-build \
+  qtbase5-dev qtbase5-dev-tools \
+  libboost-all-dev nlohmann-json3-dev
 ```
+
+Notes:
+
+- `libboost-all-dev` can be replaced with a smaller Boost development package
+  if it includes Boost Interprocess headers on your distribution.
+- The project does not use Qt Charts, Qt OpenGL, Qt Network, Qt Multimedia, or
+  Qt Concurrent. Installing `qt6-base-dev` or `qtbase5-dev` is enough for the
+  current frontend.
+- The generator target links `stdc++fs` for filesystem compatibility, so a
+  GCC/libstdc++ toolchain is the least surprising option.
 
 ## Installation
 
