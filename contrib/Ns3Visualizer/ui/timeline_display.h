@@ -18,10 +18,12 @@ class PpduCompositionChartWidget;
 class NodeThroughputChartWidget;
 class RxOutcomeChartWidget;
 class McsDistributionChartWidget;
+class PhyStatePieChartWidget;
 class QProcess;
 class QLabel;
 class QStackedWidget;
 class QPlainTextEdit;
+class QPushButton;
 
 namespace Ui {
 class Timeline_Display;
@@ -47,6 +49,8 @@ public:
 private:
     void setMetricsPage(int index);
     void setLatencyPage(int index);
+    void setLatencyCdfMode(bool enabled);
+    void syncLatencyCdfButton();
     void showOutputWindow();
 
     Ui::Timeline_Display *ui;
@@ -58,9 +62,11 @@ private:
     NodeThroughputChartWidget *m_nodeThroughputChart = nullptr;
     RxOutcomeChartWidget *m_rxOutcomeChart = nullptr;
     McsDistributionChartWidget *m_mcsDistributionChart = nullptr;
+    PhyStatePieChartWidget *m_phyStatePieChart = nullptr;
     QPlainTextEdit *m_outputView = nullptr;
     QStackedWidget *m_latencyStack = nullptr;
     QLabel *m_latencyTitle = nullptr;
+    QPushButton *m_latencyCdfButton = nullptr;
     QVector<QString> m_latencyTitles;
     int m_currentLatencyPage = 0;
     QStackedWidget *m_metricsStack = nullptr;

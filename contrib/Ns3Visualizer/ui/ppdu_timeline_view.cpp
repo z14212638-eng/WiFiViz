@@ -10,6 +10,7 @@
 #include <QToolTip>
 
 #include <algorithm>
+#include <cmath>
 #include <complex>
 #include <cstdlib>
 #include <iostream>
@@ -999,6 +1000,54 @@ std::pair<uint64_t, uint64_t> PpduTimelineView::currentTimeBounds() const
     }
 
     return {startNs, endNs};
+}
+
+int
+PpduTimelineView::usableTimelineWidth() const
+{
+    return std::max(1, width() - m_leftMargin - 10);
+}
+
+int64_t
+PpduTimelineView::clampViewStartNs(double requestedStartNs, double nsToPixel) const
+{
+    const auto [dataStartNs, dataEndNs] = currentTimeBounds();
+    if (dataEndNs <= dataStartNs)
+    {
+        return std::max<int64_t>(0, static_cast<int64_t>(std::llround(requestedStartNs)));
+    }
+
+    const double visibleNs = double(usableTimelineWidth()) / std::max(nsToPixel, 1e-12);
+    const double minStart = double(dataStartNs);
+    const double maxStart = std::max(minStart, double(dataEndNs) - visibleNs);
+    const double clamped = std::clamp(requestedStartNs, minStart, maxStart);
+    return std::max<int64_t>(0, static_cast<int64_t>(std::llround(clamped)));
+}
+
+void
+PpduTimelineView::syncRangeSliderToView()
+{
+    const auto [dataStartNs, dataEndNs] = currentTimeBounds();
+    if (dataEndNs <= dataStartNs)
+    {
+        m_rangeStart = 0.0;
+        m_rangeEnd = 1.0;
+        return;
+    }
+
+    const double spanNs = double(dataEndNs - dataStartNs);
+    const double visibleNs = double(usableTimelineWidth()) / std::max(m_nsToPixel, 1e-12);
+    if (visibleNs >= spanNs)
+    {
+        m_rangeStart = 0.0;
+        m_rangeEnd = 1.0;
+        return;
+    }
+
+    const double startRatio = (double(m_viewStartNs) - double(dataStartNs)) / spanNs;
+    const double endRatio = (double(m_viewStartNs) + visibleNs - double(dataStartNs)) / spanNs;
+    m_rangeStart = std::clamp(startRatio, 0.0, 1.0);
+    m_rangeEnd = std::clamp(endRatio, m_rangeStart, 1.0);
 }
 
 void PpduTimelineView::scheduleDataUpdate()
@@ -2002,6 +2051,8 @@ void PpduTimelineView::onSetTimeRange()
     m_nsToPixel = double(usableWidth) / double(rangeNs);
 
     m_nsToPixel = std::clamp(m_nsToPixel, 1e-9, 1e-4);
+    m_viewStartNs = clampViewStartNs(m_viewStartNs, m_nsToPixel);
+    syncRangeSliderToView();
 
     m_hoverIndex = -1;
     m_overlay->close();
@@ -2012,9 +2063,32 @@ void PpduTimelineView::onSetTimeRange()
 
 void PpduTimelineView::wheelEvent(QWheelEvent *event)
 {
-    double factor = (event->angleDelta().y() > 0) ? 1.2 : 0.8;
-    m_nsToPixel = std::clamp(m_nsToPixel * factor, 1e-9, 1e-4);
+    const int delta = event->angleDelta().y();
+    if (delta == 0)
+    {
+        event->accept();
+        return;
+    }
+
+    const int usableWidth = usableTimelineWidth();
+    const int mouseX = std::clamp(event->position().toPoint().x(), m_leftMargin, m_leftMargin + usableWidth);
+    const double anchorPx = double(mouseX - m_leftMargin);
+    const double anchorNs = double(m_viewStartNs) + anchorPx / std::max(m_nsToPixel, 1e-12);
+
+    const double steps = std::max(1.0, std::abs(double(delta)) / 120.0);
+    const double factor = std::pow(1.2, steps);
+    const double oldScale = m_nsToPixel;
+    double newScale = (delta > 0) ? oldScale * factor : oldScale / factor;
+    newScale = std::clamp(newScale, 1e-9, 1e-4);
+
+    m_nsToPixel = newScale;
+    const double requestedStartNs = anchorNs - anchorPx / m_nsToPixel;
+    m_viewStartNs = clampViewStartNs(requestedStartNs, m_nsToPixel);
+    syncRangeSliderToView();
+    m_hoverIndex = -1;
+    m_overlay->close();
     update();
+    event->accept();
 }
 
 void PpduTimelineView::mousePressEvent(QMouseEvent *e)
@@ -2140,8 +2214,10 @@ void PpduTimelineView::mouseMoveEvent(QMouseEvent *e)
 
         if (m_pressMoved && qAbs(dx) > 0)
         {
-            m_viewStartNs = std::max<int64_t>(
-                0, m_viewStartNs - dx / m_nsToPixel);
+            m_viewStartNs = clampViewStartNs(
+                double(m_viewStartNs) - double(dx) / std::max(m_nsToPixel, 1e-12),
+                m_nsToPixel);
+            syncRangeSliderToView();
             update();
         }
 
@@ -2236,6 +2312,8 @@ void PpduTimelineView::mouseReleaseEvent(QMouseEvent *e)
             m_nsToPixel = double(usableWidth) / double(endNs - startNs);
 
             m_nsToPixel = std::clamp(m_nsToPixel, 1e-9, 1e-4);
+            m_viewStartNs = clampViewStartNs(m_viewStartNs, m_nsToPixel);
+            syncRangeSliderToView();
         }
 
         m_hoverIndex = -1;

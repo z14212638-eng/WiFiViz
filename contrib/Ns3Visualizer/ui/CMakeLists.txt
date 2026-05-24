@@ -88,6 +88,8 @@ set(PROJECT_SOURCES
     node_throughput_chart.h
     rx_outcome_chart.cpp
     rx_outcome_chart.h
+    phy_state_pie_chart.cpp
+    phy_state_pie_chart.h
     mcs_distribution_chart.cpp
     mcs_distribution_chart.h
     process_terminal.cpp

@@ -75,7 +75,8 @@ This GitHub repository should not contain:
 - Shared-memory trace transport from ns-3 to the Qt application.
 - PPDU-level timeline visualization, channel-state view, PHY-state view, detail
   inspection, throughput charts, delay charts, frame composition, node
-  throughput, RX outcome, MCS distribution, and simulation output viewer.
+  throughput, RX outcome, MCS distribution, PHY-state pie chart, delay CDF
+  view, and simulation output viewer.
 
 ![Full GUI workflow](img/full-gui-workflow.gif)
 
@@ -550,6 +551,13 @@ The delay panel switches between:
 These charts are useful for identifying MAC congestion and contention-induced
 service delay.
 
+Each delay chart also provides `CDF View`:
+
+- X-axis: delay in milliseconds.
+- Y-axis: cumulative probability from 0 to 1.
+- A curve closer to the left indicates lower overall delay.
+- A steeper curve indicates more stable delay.
+
 ### Frame Mix Chart
 
 ![Frame mix chart](img/frame-mix-chart.png)
@@ -582,6 +590,15 @@ together with the PPDU and channel-state timelines.
 The MCS distribution chart summarizes modulation and coding scheme usage across
 observed transmissions. It helps diagnose rate adaptation behavior and channel
 quality.
+
+### PHY State Pie Chart
+
+![PHY state pie chart](img/phy-state-pie-chart.png)
+
+The PHY state pie chart aggregates the duration share of IDLE, TX, RX,
+CCA_BUSY, SWITCHING, SLEEP, OFF, and UNKNOWN states. The center label reports
+the average observed duration per PHY. Tooltips also show aggregate duration,
+per-PHY average duration, and percentage share.
 
 ### Output Window
 
@@ -676,6 +693,7 @@ Place the following files under `img/` when preparing the public README:
 | `img/node-throughput-chart.png` | Node throughput share chart. |
 | `img/rx-outcome-chart.png` | RX outcome chart. |
 | `img/mcs-distribution-chart.png` | MCS distribution chart. |
+| `img/phy-state-pie-chart.png` | PHY state duration pie chart. |
 | `img/output-window.png` | Read-only simulation output window. |
 
 ## Troubleshooting

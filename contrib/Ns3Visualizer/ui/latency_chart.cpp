@@ -117,6 +117,7 @@ LatencyChartWidget::reset()
     m_updateQueued = false;
     m_hovering = false;
     m_hoverIndex = -1;
+    m_cdfHoverIndex = -1;
     m_viewStartIndex = 0;
     m_viewCount = 0;
     m_xZoom = 1.0;
@@ -132,6 +133,27 @@ LatencyChartWidget::reset()
         m_vScroll->setValue(0);
     }
     update();
+}
+
+void
+LatencyChartWidget::setCdfMode(bool enabled)
+{
+    if (m_cdfMode == enabled)
+    {
+        return;
+    }
+    m_cdfMode = enabled;
+    m_hovering = false;
+    m_hoverIndex = -1;
+    m_cdfHoverIndex = -1;
+    updateScrollBarVisibility();
+    update();
+}
+
+bool
+LatencyChartWidget::cdfMode() const
+{
+    return m_cdfMode;
 }
 
 void
@@ -198,22 +220,13 @@ LatencyChartWidget::paintEvent(QPaintEvent*)
                Qt::AlignLeft | Qt::AlignTop,
                subtitleText());
 
-    const int leftPad = card.left() + 52;
-    const int rightPad = 16;
-    const int topPad = card.top() + 74;
-    const int bottomPad = 34;
-
     if (m_viewCount == 0)
     {
         updateScrollBars();
     }
 
-    QRect plot(leftPad,
-               topPad,
-               card.width() - (leftPad - card.left()) - rightPad -
-                   (m_vScroll ? m_vScroll->sizeHint().width() : 0),
-               card.height() - (topPad - card.top()) - bottomPad -
-                   (m_hScroll ? m_hScroll->sizeHint().height() : 0));
+    updateScrollBarVisibility();
+    const QRect plot = plotRectForCard(card);
 
     if (plot.width() <= 10 || plot.height() <= 10)
     {
@@ -231,6 +244,35 @@ LatencyChartWidget::paintEvent(QPaintEvent*)
         return;
     }
 
+    if (m_cdfMode)
+    {
+        paintCdf(p, card, plot);
+        return;
+    }
+
+    paintTimeSeries(p, card, plot);
+}
+
+QRect
+LatencyChartWidget::plotRectForCard(const QRect& card) const
+{
+    const int leftPad = card.left() + 58;
+    const int rightPad = 18;
+    const int topPad = card.top() + 74;
+    const int bottomPad = 34;
+
+    const int vScrollWidth = (!m_cdfMode && m_vScroll) ? m_vScroll->sizeHint().width() : 0;
+    const int hScrollHeight = (!m_cdfMode && m_hScroll) ? m_hScroll->sizeHint().height() : 0;
+
+    return QRect(leftPad,
+                 topPad,
+                 card.width() - (leftPad - card.left()) - rightPad - vScrollWidth,
+                 card.height() - (topPad - card.top()) - bottomPad - hScrollHeight);
+}
+
+void
+LatencyChartWidget::paintTimeSeries(QPainter& p, const QRect& card, const QRect& plot)
+{
     const int start = m_viewStartIndex;
     const int end = viewEndIndex();
     if (start < 0 || end < start)
@@ -352,6 +394,108 @@ LatencyChartWidget::paintEvent(QPaintEvent*)
     }
 }
 
+void
+LatencyChartWidget::paintCdf(QPainter& p, const QRect& card, const QRect& plot)
+{
+    const QVector<double> sortedMs = sortedSampleMs();
+    if (sortedMs.isEmpty())
+    {
+        p.setPen(kTextMuted);
+        p.drawText(plot, Qt::AlignCenter, "Waiting for delay samples...");
+        return;
+    }
+
+    const double maxMs = std::max(0.001, sortedMs.back());
+    const int hLines = 4;
+    p.setPen(QPen(kGrid, 1));
+    for (int i = 0; i <= hLines; ++i)
+    {
+        const int y = plot.top() + (plot.height() * i) / hLines;
+        p.drawLine(plot.left(), y, plot.right(), y);
+    }
+    for (int i = 0; i <= hLines; ++i)
+    {
+        const int x = plot.left() + (plot.width() * i) / hLines;
+        p.drawLine(x, plot.top(), x, plot.bottom());
+    }
+
+    p.setPen(QPen(kFrame, 1));
+    p.drawRoundedRect(plot, 12, 12);
+
+    p.setPen(kTextMuted);
+    p.drawText(card.left() + 12, plot.top() - 12, "CDF");
+    for (int i = 0; i <= hLines; ++i)
+    {
+        const double probability = 1.0 - double(i) / hLines;
+        const int y = plot.top() + (plot.height() * i) / hLines;
+        p.drawText(card.left() + 12, y + 4, QString::number(probability, 'f', 2));
+    }
+
+    for (int i = 0; i <= hLines; ++i)
+    {
+        const double value = maxMs * double(i) / hLines;
+        const int x = plot.left() + (plot.width() * i) / hLines;
+        p.drawText(x - 18, plot.bottom() + 18, QString::number(value, 'f', value < 10.0 ? 2 : 1));
+    }
+    p.drawText(QRect(plot.left(), plot.bottom() + 26, plot.width(), 18),
+               Qt::AlignHCenter | Qt::AlignTop,
+               "Delay (ms)");
+
+    QPainterPath linePath;
+    QPainterPath fillPath;
+    for (int i = 0; i < sortedMs.size(); ++i)
+    {
+        const double xRatio = std::clamp(sortedMs[i] / maxMs, 0.0, 1.0);
+        const double probability = double(i + 1) / double(sortedMs.size());
+        const int x = plot.left() + int(plot.width() * xRatio);
+        const int y = plot.bottom() - int(plot.height() * probability);
+
+        if (i == 0)
+        {
+            linePath.moveTo(plot.left(), plot.bottom());
+            linePath.lineTo(x, y);
+            fillPath.moveTo(plot.left(), plot.bottom());
+            fillPath.lineTo(x, y);
+        }
+        else
+        {
+            linePath.lineTo(x, y);
+            fillPath.lineTo(x, y);
+        }
+    }
+    fillPath.lineTo(plot.right(), plot.top());
+    fillPath.lineTo(plot.right(), plot.bottom());
+    fillPath.closeSubpath();
+
+    QLinearGradient fillGradient(plot.topLeft(), plot.bottomLeft());
+    fillGradient.setColorAt(0.0, QColor(18, 184, 134, 90));
+    fillGradient.setColorAt(1.0, QColor(18, 184, 134, 8));
+    p.setPen(Qt::NoPen);
+    p.setBrush(fillGradient);
+    p.drawPath(fillPath);
+
+    p.setPen(QPen(QColor(18, 184, 134), 2.6, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    p.setBrush(Qt::NoBrush);
+    p.drawPath(linePath);
+
+    if (m_cdfHoverIndex >= 0 && m_cdfHoverIndex < sortedMs.size())
+    {
+        const double ms = sortedMs[m_cdfHoverIndex];
+        const double probability = double(m_cdfHoverIndex + 1) / double(sortedMs.size());
+        const int x = plot.left() + int(plot.width() * std::clamp(ms / maxMs, 0.0, 1.0));
+        const int y = plot.bottom() - int(plot.height() * probability);
+        p.setPen(QPen(QColor(18, 184, 134, 140), 1.2, Qt::DashLine));
+        p.drawLine(x, plot.top(), x, plot.bottom());
+        p.drawLine(plot.left(), y, plot.right(), y);
+        p.setPen(Qt::NoPen);
+        p.setBrush(Qt::white);
+        p.drawEllipse(QPoint(x, y), 5, 5);
+        p.setPen(QPen(QColor(18, 184, 134), 2));
+        p.setBrush(Qt::NoBrush);
+        p.drawEllipse(QPoint(x, y), 8, 8);
+    }
+}
+
 int
 LatencyChartWidget::indexFromX(int x, int plotLeft, int plotWidth) const
 {
@@ -381,26 +525,43 @@ void
 LatencyChartWidget::mouseMoveEvent(QMouseEvent* event)
 {
     const QRect card = rect().adjusted(6, 6, -6, -6);
-    const int leftPad = card.left() + 52;
-    const int rightPad = 16;
-    const int topPad = card.top() + 74;
-    const int bottomPad = 34;
-    QRect plot(leftPad,
-               topPad,
-               card.width() - (leftPad - card.left()) - rightPad -
-                   (m_vScroll ? m_vScroll->sizeHint().width() : 0),
-               card.height() - (topPad - card.top()) - bottomPad -
-                   (m_hScroll ? m_hScroll->sizeHint().height() : 0));
+    const QRect plot = plotRectForCard(card);
 
     if (!plot.contains(event->pos()))
     {
         m_hovering = false;
         m_hoverIndex = -1;
+        m_cdfHoverIndex = -1;
         scheduleUpdate();
         return;
     }
 
     setFocus();
+    if (m_cdfMode)
+    {
+        const QVector<double> sortedMs = sortedSampleMs();
+        m_cdfHoverIndex = cdfIndexFromX(event->pos().x(), plot, sortedMs);
+        if (m_cdfHoverIndex >= 0 && m_cdfHoverIndex < sortedMs.size())
+        {
+            const double probability = double(m_cdfHoverIndex + 1) / double(sortedMs.size());
+            QToolTip::showText(mapToGlobal(event->pos() + QPoint(14, -12)),
+                               QString(
+                                   "<div style='min-width:180px;'>"
+                                   "<div style='font-size:14px;font-weight:700;color:#223043;'>%1 CDF</div>"
+                                   "<div style='margin-top:6px;color:#5D6B7B;'>Delay</div>"
+                                   "<div style='font-size:15px;font-weight:600;color:#12B886;'>%2 ms</div>"
+                                   "<div style='margin-top:6px;color:#5D6B7B;'>Probability</div>"
+                                   "<div style='font-size:15px;font-weight:600;'>%3</div>"
+                                   "</div>")
+                                   .arg(titleText())
+                                   .arg(sortedMs[m_cdfHoverIndex], 0, 'f', sortedMs[m_cdfHoverIndex] < 10.0 ? 3 : 2)
+                                   .arg(probability, 0, 'f', 3),
+                               this);
+        }
+        scheduleUpdate();
+        return;
+    }
+
     m_hovering = true;
     m_hoverIndex = indexFromX(event->pos().x(), plot.left(), plot.width());
     if (m_hoverIndex >= 0)
@@ -438,23 +599,14 @@ LatencyChartWidget::mouseMoveEvent(QMouseEvent* event)
 void
 LatencyChartWidget::wheelEvent(QWheelEvent* event)
 {
-    if (m_sampleTimeNs.isEmpty())
+    if (m_sampleTimeNs.isEmpty() || m_cdfMode)
     {
         event->ignore();
         return;
     }
 
     const QRect card = rect().adjusted(6, 6, -6, -6);
-    const int leftPad = card.left() + 52;
-    const int rightPad = 16;
-    const int topPad = card.top() + 74;
-    const int bottomPad = 34;
-    QRect plot(leftPad,
-               topPad,
-               card.width() - (leftPad - card.left()) - rightPad -
-                   (m_vScroll ? m_vScroll->sizeHint().width() : 0),
-               card.height() - (topPad - card.top()) - bottomPad -
-                   (m_hScroll ? m_hScroll->sizeHint().height() : 0));
+    const QRect plot = plotRectForCard(card);
 
     const QPoint cursorPos = event->position().toPoint();
     if (!plot.contains(cursorPos) || plot.width() <= 0)
@@ -529,6 +681,7 @@ LatencyChartWidget::leaveEvent(QEvent*)
 {
     m_hovering = false;
     m_hoverIndex = -1;
+    m_cdfHoverIndex = -1;
     QToolTip::hideText();
     update();
 }
@@ -544,6 +697,7 @@ LatencyChartWidget::resizeEvent(QResizeEvent*)
     const int w = m_vScroll->sizeHint().width();
     m_hScroll->setGeometry(0, height() - h, width() - w, h);
     m_vScroll->setGeometry(width() - w, 0, w, height() - h);
+    updateScrollBarVisibility();
     updateScrollBars();
 }
 
@@ -610,6 +764,19 @@ LatencyChartWidget::updateScrollBars()
     m_vScroll->setSingleStep(1);
 }
 
+void
+LatencyChartWidget::updateScrollBarVisibility()
+{
+    if (m_hScroll)
+    {
+        m_hScroll->setVisible(!m_cdfMode);
+    }
+    if (m_vScroll)
+    {
+        m_vScroll->setVisible(!m_cdfMode);
+    }
+}
+
 QString
 LatencyChartWidget::titleText() const
 {
@@ -666,4 +833,36 @@ LatencyChartWidget::metricValueNs(const PpduVisualItem& ppdu) const
         return ppdu.macE2eDelayNs;
     }
     return 0;
+}
+
+QVector<double>
+LatencyChartWidget::sortedSampleMs() const
+{
+    QVector<double> values;
+    values.reserve(m_sampleLatencyUsX10.size());
+    for (const uint32_t usX10 : m_sampleLatencyUsX10)
+    {
+        values.append(double(usX10) / 10000.0);
+    }
+    std::sort(values.begin(), values.end());
+    return values;
+}
+
+int
+LatencyChartWidget::cdfIndexFromX(int x, const QRect& plot, const QVector<double>& sortedMs) const
+{
+    if (sortedMs.isEmpty() || plot.width() <= 0)
+    {
+        return -1;
+    }
+    const double maxMs = std::max(0.001, sortedMs.back());
+    double ratio = double(x - plot.left()) / double(plot.width());
+    ratio = std::clamp(ratio, 0.0, 1.0);
+    const double targetMs = ratio * maxMs;
+    auto it = std::lower_bound(sortedMs.constBegin(), sortedMs.constEnd(), targetMs);
+    if (it == sortedMs.constEnd())
+    {
+        return sortedMs.size() - 1;
+    }
+    return int(std::distance(sortedMs.constBegin(), it));
 }

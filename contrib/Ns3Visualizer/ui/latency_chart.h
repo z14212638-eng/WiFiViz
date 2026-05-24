@@ -1,10 +1,13 @@
 #pragma once
 
+#include <QRect>
 #include <QScrollBar>
 #include <QVector>
 #include <QWidget>
 
 #include "ppdu_visual_item.h"
+
+class QPainter;
 
 enum class LatencyMetric
 {
@@ -20,6 +23,8 @@ class LatencyChartWidget : public QWidget
 
     void appendPpdu(const PpduVisualItem& ppdu);
     void reset();
+    void setCdfMode(bool enabled);
+    bool cdfMode() const;
 
   protected:
     void paintEvent(QPaintEvent* event) override;
@@ -43,6 +48,12 @@ class LatencyChartWidget : public QWidget
     QString yAxisText() const;
     QString tooltipTitleText() const;
     uint64_t metricValueNs(const PpduVisualItem& ppdu) const;
+    QVector<double> sortedSampleMs() const;
+    QRect plotRectForCard(const QRect& card) const;
+    void paintTimeSeries(QPainter& p, const QRect& card, const QRect& plot);
+    void paintCdf(QPainter& p, const QRect& card, const QRect& plot);
+    void updateScrollBarVisibility();
+    int cdfIndexFromX(int x, const QRect& plot, const QVector<double>& sortedMs) const;
 
     QVector<uint64_t> m_sampleTimeNs;
     QVector<uint32_t> m_sampleLatencyUsX10;
@@ -52,6 +63,8 @@ class LatencyChartWidget : public QWidget
 
     bool m_hovering = false;
     int m_hoverIndex = -1;
+    int m_cdfHoverIndex = -1;
+    bool m_cdfMode = false;
 
     QScrollBar* m_hScroll = nullptr;
     QScrollBar* m_vScroll = nullptr;

@@ -122,6 +122,9 @@ private:
     bool showPhyStateHover(const QPoint &pos);
     void updateModeButton();
     std::pair<uint64_t, uint64_t> currentTimeBounds() const;
+    int usableTimelineWidth() const;
+    int64_t clampViewStartNs(double requestedStartNs, double nsToPixel) const;
+    void syncRangeSliderToView();
     void scheduleDataUpdate();
     void rebuildPpduLayoutCache();
     void ensurePpduLayoutCache() const;

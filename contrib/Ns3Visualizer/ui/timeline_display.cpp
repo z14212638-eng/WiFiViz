@@ -5,6 +5,7 @@
 #include "node_throughput_chart.h"
 #include "ppdu_timeline_view.h"
 #include "ppdu_composition_chart.h"
+#include "phy_state_pie_chart.h"
 #include "rx_outcome_chart.h"
 #include "throughput_chart.h"
 
@@ -15,6 +16,7 @@
 #include <QPlainTextEdit>
 #include <QProcess>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QStackedWidget>
 #include <QTextCursor>
 #include <QVBoxLayout>
@@ -119,8 +121,30 @@ Timeline_Display::Timeline_Display(QWidget *parent)
         return button;
     };
 
+    m_latencyCdfButton = new QPushButton("CDF View", latencyFrame);
+    m_latencyCdfButton->setCursor(Qt::PointingHandCursor);
+    m_latencyCdfButton->setCheckable(true);
+    m_latencyCdfButton->setToolTip("Toggle CDF view for the current delay chart");
+    m_latencyCdfButton->setFixedHeight(34);
+    m_latencyCdfButton->setMinimumWidth(86);
+    m_latencyCdfButton->setStyleSheet(
+        "QPushButton {"
+        "background: #F5F8FC;"
+        "border: 1px solid #D5DDE8;"
+        "border-radius: 6px;"
+        "padding: 0 12px;"
+        "color: #344255;"
+        "font-weight: 700;"
+        "}"
+        "QPushButton:hover { background: #E7EEF8; }"
+        "QPushButton:checked {"
+        "background: #DDF6EC;"
+        "border-color: #12B886;"
+        "color: #087F5B;"
+        "}");
     auto *latencyPrevButton = makePageButton("‹");
     auto *latencyNextButton = makePageButton("›");
+    latencyHeaderLayout->addWidget(m_latencyCdfButton);
     latencyHeaderLayout->addWidget(latencyPrevButton);
     latencyHeaderLayout->addWidget(latencyNextButton);
     latencyLayout->addLayout(latencyHeaderLayout);
@@ -145,6 +169,9 @@ Timeline_Display::Timeline_Display(QWidget *parent)
             return;
         setLatencyPage((m_currentLatencyPage + 1) % count);
     });
+    connect(m_latencyCdfButton, &QPushButton::clicked, this, [this](bool checked) {
+        setLatencyCdfMode(checked);
+    });
     setLatencyPage(0);
 
     auto *prevButton = makePageButton("‹");
@@ -158,13 +185,15 @@ Timeline_Display::Timeline_Display(QWidget *parent)
     m_nodeThroughputChart = new NodeThroughputChartWidget(m_metricsStack);
     m_rxOutcomeChart = new RxOutcomeChartWidget(m_metricsStack);
     m_mcsDistributionChart = new McsDistributionChartWidget(m_metricsStack);
+    m_phyStatePieChart = new PhyStatePieChartWidget(m_metricsStack);
     m_metricsStack->addWidget(m_compositionChart);
     m_metricsStack->addWidget(m_nodeThroughputChart);
     m_metricsStack->addWidget(m_rxOutcomeChart);
     m_metricsStack->addWidget(m_mcsDistributionChart);
+    m_metricsStack->addWidget(m_phyStatePieChart);
     metricsLayout->addWidget(m_metricsStack, 1);
 
-    m_metricTitles = {"Frame Mix", "Node Throughput", "RX Outcome", "MCS Distribution"};
+    m_metricTitles = {"Frame Mix", "Node Throughput", "RX Outcome", "MCS Distribution", "PHY State Share"};
     connect(prevButton, &QPushButton::clicked, this, [this]() {
         const int count = m_metricsStack ? m_metricsStack->count() : 0;
         if (count <= 0)
@@ -213,6 +242,8 @@ void Timeline_Display::resetPage()
         m_rxOutcomeChart->reset();
     if (m_mcsDistributionChart)
         m_mcsDistributionChart->reset();
+    if (m_phyStatePieChart)
+        m_phyStatePieChart->reset();
     setLatencyPage(0);
     setMetricsPage(0);
 
@@ -257,6 +288,8 @@ void Timeline_Display::appendPpdu(const PpduVisualItem &ppdu)
         m_rxOutcomeChart->appendPpdu(ppdu);
     if (m_mcsDistributionChart)
         m_mcsDistributionChart->appendPpdu(ppdu);
+    if (m_phyStatePieChart)
+        m_phyStatePieChart->appendPpdu(ppdu);
 }
 
 void Timeline_Display::showSniffFail()
@@ -277,6 +310,8 @@ void Timeline_Display::showSniffFail()
         m_rxOutcomeChart->reset();
     if (m_mcsDistributionChart)
         m_mcsDistributionChart->reset();
+    if (m_phyStatePieChart)
+        m_phyStatePieChart->reset();
     setLatencyPage(0);
     setMetricsPage(0);
 }
@@ -294,6 +329,50 @@ Timeline_Display::setLatencyPage(int index)
     {
         m_latencyTitle->setText(m_latencyTitles[m_currentLatencyPage]);
     }
+    syncLatencyCdfButton();
+}
+
+void
+Timeline_Display::setLatencyCdfMode(bool enabled)
+{
+    LatencyChartWidget *chart = nullptr;
+    if (m_currentLatencyPage == 0)
+    {
+        chart = m_queueingDelayChart;
+    }
+    else if (m_currentLatencyPage == 1)
+    {
+        chart = m_macE2eDelayChart;
+    }
+    if (!chart)
+    {
+        return;
+    }
+    chart->setCdfMode(enabled);
+    syncLatencyCdfButton();
+}
+
+void
+Timeline_Display::syncLatencyCdfButton()
+{
+    if (!m_latencyCdfButton)
+    {
+        return;
+    }
+
+    bool enabled = false;
+    if (m_currentLatencyPage == 0 && m_queueingDelayChart)
+    {
+        enabled = m_queueingDelayChart->cdfMode();
+    }
+    else if (m_currentLatencyPage == 1 && m_macE2eDelayChart)
+    {
+        enabled = m_macE2eDelayChart->cdfMode();
+    }
+
+    QSignalBlocker blocker(m_latencyCdfButton);
+    m_latencyCdfButton->setChecked(enabled);
+    m_latencyCdfButton->setText("CDF View");
 }
 
 void
