@@ -6,7 +6,7 @@
  * packets. The detailed information and discription of this file remains to be updated.
  *
  * @author Kai Zhang <2747752379@hust.edu.cn>
- * @version 1.0
+ * @version 2.0.0
  * @date 2025.11.3
  *
  ***********************************/

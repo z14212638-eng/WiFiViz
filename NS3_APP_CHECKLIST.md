@@ -29,7 +29,7 @@ directory, and users should install it as:
 | Regression tests | Present: `test/wifiviz-test-suite.cc`; currently covers helper-level behavior. |
 | Coding style | Module follows ns-3 CMake contrib structure; run style review before release. |
 | GPLv2-compatible license | Yes. MIT by default, with ns-3-derived examples retaining GPL-2.0-only SPDX headers. |
-| Release numbering plan | Use semantic versioning, starting with `v0.1.0` for the first app-store candidate. |
+| Release numbering plan | Use semantic versioning. Current release target: `v2.0.0`. |
 | App name | `WiFiViz` / `WiFiViz`. |
 | Thumbnail icon | Not yet finalized; add an app-store thumbnail before publishing. |
 | App-store tab content | README provides draft overview, install, usage, UI, troubleshooting, and license text. |
