@@ -7,15 +7,14 @@ Wi-Fi simulations through a Qt-based graphical workflow. It combines scenario
 configuration, JSON persistence, script generation, ns-3 execution, shared-memory
 trace collection, and interactive PHY/MAC visualization in one tool.
 
-This repository intentionally contains only the visualizer contrib module. It is
-designed to be copied into an existing ns-3 source tree and does not include the
-ns-3 core source code.
+This repository provides the visualizer contrib module and a small scratch
+launcher. Users install it into an existing ns-3 source tree.
 
-![Project overview](img/overview.gif)
+![Project overview](img/visualization-dashboard.png)
 
 ## Table of Contents
 
-- [Repository Scope](#repository-scope)
+- [Package Layout](#package-layout)
 - [Main Capabilities](#main-capabilities)
 - [Requirements](#requirements)
 - [Installation](#installation)
@@ -26,24 +25,14 @@ ns-3 core source code.
 - [Visualization Guide](#visualization-guide)
 - [Project and Data Files](#project-and-data-files)
 - [Module Layout](#module-layout)
-- [Image and GIF Checklist](#image-and-gif-checklist)
 - [Troubleshooting](#troubleshooting)
-- [To Developers](#to-developers)
 
-## Repository Scope
+## Package Layout
 
-Expected installation location:
-
-```text
-ns-3.46/
-└── contrib/
-    └── Ns3Visualizer/
-```
-
-This GitHub repository should contain:
+After cloning this repository, the important paths are:
 
 ```text
-.
+Ns3-based-Visualization/
 ├── README.md
 ├── README.zh-CN.md
 ├── img/
@@ -53,14 +42,8 @@ This GitHub repository should contain:
     └── Ns3Visualizer/
 ```
 
-This GitHub repository should not contain:
-
-- the full ns-3 source tree,
-- `scratch/` simulation output,
-- generated `Simulation/Designed/` projects,
-- local `.codex` files,
-- AppImage packaging folders such as `AppDir/` and `squashfs-root/`,
-- unrelated contrib modules such as `contrib/nr`.
+During installation, copy `contrib/Ns3Visualizer` into your ns-3 `contrib/`
+directory and copy `tools/visualizer.cc` into ns-3 `scratch/`.
 
 ## Main Capabilities
 
@@ -78,7 +61,7 @@ This GitHub repository should not contain:
   throughput, RX outcome, MCS distribution, PHY-state pie chart, delay CDF
   view, and simulation output viewer.
 
-![Full GUI workflow](img/full-gui-workflow.gif)
+![Full GUI workflow](img/simulation-config-overview.png)
 
 ## Requirements
 
@@ -210,8 +193,6 @@ Important behavior:
 - If no PPDU records are received, the result page reports that sniffing failed
   or that the selected script did not emit visualizer records.
 
-![Generate, build, and run](img/generate-build-run.gif)
-
 ## Run Mode 2: One-Command Script Mode
 
 One-command mode is intended for users who already have an ns-3 script and want
@@ -320,8 +301,7 @@ You can also start the viewer manually if needed:
 
 ## UI Guide
 
-This section describes every major UI page and panel. The image names are fixed
-so screenshots and GIFs can be placed under `img/` without changing the README.
+This section describes every major UI page and panel.
 
 ### 1. Welcome and NS-3 Path Page
 
@@ -385,7 +365,7 @@ Building controls define the physical simulation environment:
 - exterior wall type,
 - simulation time.
 
-![Interactive layout map](img/layout-map.gif)
+![Interactive layout map](img/layout-map.png)
 
 The layout map renders AP and STA positions inside the configured building
 boundary. Nodes can be moved interactively. The enlarged map view supports
@@ -490,8 +470,6 @@ The result dashboard receives records from ns-3 through shared memory and
 updates linked views in real time or after simulation completion.
 
 ### PPDU Timeline
-
-![PPDU timeline](img/ppdu-timeline.gif)
 
 The PPDU timeline draws each PPDU as a horizontal time-span item. Width
 represents duration. Rows can be organized by sender, channel, or node/link
@@ -627,8 +605,8 @@ The generated ns-3 C++ script is written to:
 scratch/<generated-target>.cc
 ```
 
-These files are runtime/generated artifacts and should not be committed to this
-repository.
+These files are generated automatically by the full GUI workflow. You can keep
+them for later inspection or delete them after the experiment.
 
 ## Module Layout
 
@@ -661,40 +639,6 @@ contrib/Ns3Visualizer/
 tools/
 └── visualizer.cc              # scratch launcher for `./ns3 run visualizer`
 ```
-
-## Image and GIF Checklist
-
-Place the following files under `img/` when preparing the public README:
-
-| File | What it should show |
-| --- | --- |
-| `img/overview.gif` | Short end-to-end overview of selecting/configuring/running/viewing a simulation. |
-| `img/full-gui-workflow.gif` | Full GUI workflow from configuration to result dashboard. |
-| `img/welcome-ns3-path.png` | Welcome page and NS-3 path selection. |
-| `img/scene-library.png` | Simple/Complex/Scratch scene browser with preview and Markdown description. |
-| `img/simulation-config-overview.png` | Complete simulation configuration dashboard. |
-| `img/building-config.png` | Building/global simulation parameter area. |
-| `img/layout-map.gif` | Dragging AP/STA nodes and using the enlarged map. |
-| `img/ap-config.png` | AP configuration page. |
-| `img/sta-config.png` | STA configuration page. |
-| `img/edca-config.png` | EDCA/QoS dialog. |
-| `img/antenna-config.png` | Antenna dialog. |
-| `img/node-traffic-panel.png` | Right-sidebar traffic panel for a selected node. |
-| `img/flow-dialog.png` | OnOff/CBR/Bulk flow dialog. |
-| `img/generate-build-run.gif` | Clicking Generate and switching to visualization. |
-| `img/visualization-dashboard.png` | Overall result dashboard. |
-| `img/ppdu-timeline.gif` | PPDU timeline zooming, hovering, and selection. |
-| `img/channel-state-timeline.png` | Channel IDLE/BUSY/COLLISION view. |
-| `img/phy-state-timeline.png` | PHY state timeline. |
-| `img/ppdu-detail-sidebar.png` | PPDU detail inspector. |
-| `img/throughput-chart.png` | Throughput chart with average line. |
-| `img/delay-charts.png` | Queueing and MAC end-to-end delay charts. |
-| `img/frame-mix-chart.png` | Frame composition chart. |
-| `img/node-throughput-chart.png` | Node throughput share chart. |
-| `img/rx-outcome-chart.png` | RX outcome chart. |
-| `img/mcs-distribution-chart.png` | MCS distribution chart. |
-| `img/phy-state-pie-chart.png` | PHY state duration pie chart. |
-| `img/output-window.png` | Read-only simulation output window. |
 
 ## Troubleshooting
 
@@ -744,16 +688,6 @@ Use sampled visualization:
 ```
 
 Increase `rough` to reduce the number of displayed PPDU samples.
-
-## To Developers
-
-- Keep source changes under `contrib/Ns3Visualizer`.
-- Keep `tools/visualizer.cc` synchronized with the expected full-GUI launcher
-  behavior, because users copy it to `scratch/visualizer.cc`.
-- Do not commit generated projects under `Simulation/Designed/`.
-- Do not commit generated scratch scripts.
-- Do not commit packaging output or AppImage extraction folders.
-- Keep this repository independent from the full ns-3 source tree.
 
 ## License
 

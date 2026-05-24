@@ -4,13 +4,13 @@
 
 `ns3-Visualizer` 是一个 ns-3 contrib 模块，用 Qt 图形界面把 Wi-Fi 仿真的配置、运行和分析整合到同一套工作流中。它支持图形化创建场景、保存 JSON 配置、生成 ns-3 C++ 脚本、执行 `./ns3 build` 和 `./ns3 run`，并通过共享内存把 PPDU/MAC/PHY 级别的记录传给可视化界面。
 
-本仓库只包含 `contrib/Ns3Visualizer` 工具本身，不包含完整 ns-3 源码。
+本仓库提供可安装到 ns-3 中的 `contrib/Ns3Visualizer` 模块，以及一个用于启动全量 GUI 模式的 scratch 启动器。
 
-![项目概览](img/overview.gif)
+![项目概览](img/visualization-dashboard.png)
 
 ## 目录
 
-- [仓库范围](#仓库范围)
+- [目录结构](#目录结构)
 - [主要能力](#主要能力)
 - [环境要求](#环境要求)
 - [安装](#安装)
@@ -21,24 +21,14 @@
 - [结果可视化说明](#结果可视化说明)
 - [项目和数据文件](#项目和数据文件)
 - [模块目录说明](#模块目录说明)
-- [图片和 GIF 清单](#图片和-gif-清单)
 - [常见问题](#常见问题)
-- [对开发者的建议](#对开发者的建议)
 
-## 仓库范围
+## 目录结构
 
-安装后的目标路径应该是：
-
-```text
-ns-3.46/
-└── contrib/
-    └── Ns3Visualizer/
-```
-
-GitHub 仓库结构应该保持为：
+克隆仓库后，主要目录如下：
 
 ```text
-.
+Ns3-based-Visualization/
 ├── README.md
 ├── README.zh-CN.md
 ├── img/
@@ -48,14 +38,7 @@ GitHub 仓库结构应该保持为：
     └── Ns3Visualizer/
 ```
 
-本仓库不应该包含：
-
-- 完整 ns-3 源码；
-- `scratch/` 下的生成脚本；
-- `Simulation/Designed/` 下的运行生成项目；
-- 本地 `.codex` 配置；
-- `AppDir/`、`squashfs-root/`、AppImage 等打包产物；
-- `contrib/nr` 等无关 contrib 模块。
+安装时，需要把 `contrib/Ns3Visualizer` 复制到 ns-3 的 `contrib/` 目录，并把 `tools/visualizer.cc` 复制到 ns-3 的 `scratch/` 目录。
 
 ## 主要能力
 
@@ -67,7 +50,7 @@ GitHub 仓库结构应该保持为：
 - 使用共享内存在 ns-3 进程和 Qt 前端之间传输记录。
 - 提供 PPDU 时间线、信道状态时间线、PHY 状态时间线、PPDU 详情、吞吐量、时延、时延 CDF、帧组成、节点吞吐、接收结果、MCS 分布、PHY 状态扇形图和只读 Output 窗口等视图。
 
-![全量 GUI 工作流](img/full-gui-workflow.gif)
+![全量 GUI 工作流](img/simulation-config-overview.png)
 
 ## 环境要求
 
@@ -182,8 +165,6 @@ cd /path/to/ns-3.46
 - 结果页会在仿真进程启动前先启动共享内存读取线程。
 - 如果没有收到 PPDU 记录，界面会提示 sniff 失败或脚本没有输出可视化记录。
 
-![生成、构建和运行](img/generate-build-run.gif)
-
 ## 运行模式二：一键脚本模式
 
 一键脚本模式适合已经有 ns-3 脚本、只想通过一条 `./ns3 run` 命令启动仿真和可视化的用户。
@@ -283,7 +264,7 @@ Ptr<SniffUtils> sniffer =
 
 ## UI 页面说明
 
-这一节说明每一个主要界面和面板。图片文件名已经固定，后续只需要把对应截图或 GIF 放到 `img/` 目录。
+这一节说明每一个主要界面和面板。
 
 ### 1. 欢迎页和 NS-3 路径
 
@@ -337,7 +318,7 @@ Building 区域定义物理环境：
 - exterior wall type；
 - simulation time。
 
-![交互式布局图](img/layout-map.gif)
+![交互式布局图](img/layout-map.png)
 
 布局图显示 AP 和 STA 在建筑范围内的位置。节点可以拖动，放大地图支持缩放、平移和同步更新节点位置。
 
@@ -426,8 +407,6 @@ Flow 对话框支持多种业务模型：
 结果页通过共享内存接收 ns-3 记录，并实时或在仿真结束后更新多个联动视图。
 
 ### PPDU Timeline
-
-![PPDU 时间线](img/ppdu-timeline.gif)
 
 PPDU 时间线把每个 PPDU 绘制为横向时间条，宽度表示持续时间。视图支持：
 
@@ -537,7 +516,7 @@ contrib/Ns3Visualizer/Simulation/Designed/Designed_<timestamp>/
 scratch/<generated-target>.cc
 ```
 
-这些文件属于运行时生成文件，不应该提交到本仓库。
+这些文件由全量 GUI 流程自动生成。你可以保留它们用于复现实验，也可以在实验结束后删除。
 
 ## 模块目录说明
 
@@ -570,40 +549,6 @@ contrib/Ns3Visualizer/
 tools/
 └── visualizer.cc              # 用于 `./ns3 run visualizer` 的 scratch 启动器
 ```
-
-## 图片和 GIF 清单
-
-准备公开 README 时，把以下图片放到 `img/` 目录：
-
-| 文件 | 内容 |
-| --- | --- |
-| `img/overview.gif` | 从选择、配置、运行到查看结果的整体流程。 |
-| `img/full-gui-workflow.gif` | 全量 GUI 从配置到结果页的完整操作。 |
-| `img/welcome-ns3-path.png` | 欢迎页和 ns-3 路径选择。 |
-| `img/scene-library.png` | Simple/Complex/Scratch 场景库、预览图和 Markdown 说明。 |
-| `img/simulation-config-overview.png` | 完整仿真配置页。 |
-| `img/building-config.png` | Building 和全局仿真参数区域。 |
-| `img/layout-map.gif` | 拖动 AP/STA 节点和使用放大地图。 |
-| `img/ap-config.png` | AP 配置页。 |
-| `img/sta-config.png` | STA 配置页。 |
-| `img/edca-config.png` | EDCA/QoS 对话框。 |
-| `img/antenna-config.png` | 天线配置对话框。 |
-| `img/node-traffic-panel.png` | 选中节点后的右侧 flow 面板。 |
-| `img/flow-dialog.png` | OnOff/CBR/Bulk flow 配置对话框。 |
-| `img/generate-build-run.gif` | 点击 Generate 后生成、构建、运行并进入结果页。 |
-| `img/visualization-dashboard.png` | 结果可视化总览。 |
-| `img/ppdu-timeline.gif` | PPDU 时间线缩放、hover 和选择。 |
-| `img/channel-state-timeline.png` | 信道 IDLE/BUSY/COLLISION 视图。 |
-| `img/phy-state-timeline.png` | PHY 状态时间线。 |
-| `img/ppdu-detail-sidebar.png` | PPDU 详情侧栏。 |
-| `img/throughput-chart.png` | 吞吐图和平均线。 |
-| `img/delay-charts.png` | Queueing Delay 和 MAC End-to-End Delay。 |
-| `img/frame-mix-chart.png` | 帧组成统计图。 |
-| `img/node-throughput-chart.png` | 节点吞吐占比图。 |
-| `img/rx-outcome-chart.png` | 接收结果图。 |
-| `img/mcs-distribution-chart.png` | MCS 分布图。 |
-| `img/phy-state-pie-chart.png` | PHY 状态时长扇形图。 |
-| `img/output-window.png` | 只读 Output 窗口。 |
 
 ## 常见问题
 
@@ -651,15 +596,6 @@ cd /path/to/ns-3.46
 ```
 
 增大 `rough` 可以减少可视化采样数量。
-
-## 对开发者的建议
-
-- 源码变更应保持在 `contrib/Ns3Visualizer` 内；
-- 保持 `tools/visualizer.cc` 与全量 GUI 启动方式一致，因为用户会把它复制到 `scratch/visualizer.cc`；
-- 不要提交 `Simulation/Designed/`；
-- 不要提交生成的 scratch 脚本；
-- 不要提交打包产物或 AppImage 解压目录；
-- 仓库应保持为独立 contrib 工具，不包含完整 ns-3 源码。
 
 ## License
 
