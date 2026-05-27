@@ -54,6 +54,7 @@ struct PpduVisualItem
     uint32_t id;
     uint16_t nodeId;
     uint8_t channel_number;
+    uint8_t linkId = 0;
     uint64_t sender;
     uint64_t receiver;
 

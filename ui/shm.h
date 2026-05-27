@@ -53,7 +53,7 @@ struct PPDU_Meta
     uint8_t device_role;
     uint8_t device_mac[6];
     uint8_t delay_kind;
-    uint8_t reserved[1];
+    uint8_t link_id;
 };
 
 /**

@@ -442,6 +442,16 @@ struct ChannelStateSegment
     int activeCount = 0;
 };
 
+struct MloChannelRow
+{
+    uint64_t rowKey = 0;
+    uint16_t nodeId = 0;
+    uint8_t linkId = 0;
+    int channel = 0;
+    DeviceRole role = DeviceRole::Unknown;
+    QString label;
+};
+
 static inline QString channelBand(int ch)
 {
     return (ch >= 1 && ch <= 14) ? "2.4G" : "5G";
@@ -500,14 +510,23 @@ struct PhyStateSegment
     uint64_t rowKey = 0;
     uint16_t nodeId = 0;
     uint8_t channel = 0;
+    uint8_t linkId = 0;
+    DeviceRole role = DeviceRole::Unknown;
     uint64_t startNs = 0;
     uint64_t endNs = 0;
     PhyStateKindView state = PhyStateKindView::Idle;
 };
 
-static inline uint64_t phyRowKey(uint16_t nodeId, uint8_t channel)
+static inline uint64_t nodeLinkRowKey(uint16_t nodeId, uint8_t linkId)
 {
-    return (static_cast<uint64_t>(nodeId) << 32) | channel;
+    return (static_cast<uint64_t>(nodeId) << 32) | linkId;
+}
+
+static inline uint64_t nodeLinkChannelRowKey(uint16_t nodeId, uint8_t linkId, uint8_t channel)
+{
+    return (static_cast<uint64_t>(nodeId) << 40) |
+           (static_cast<uint64_t>(linkId) << 32) |
+           static_cast<uint64_t>(channel);
 }
 
 static inline PhyStateKindView toPhyStateKind(PhyStateKind state)
@@ -570,6 +589,13 @@ static inline bool isDrawablePpdu(const PpduVisualItem &item)
     return item.recordType == RecordType::Ppdu && item.txEndNs > item.txStartNs;
 }
 
+static inline bool isDrawablePhyState(const PpduVisualItem &item)
+{
+    return item.recordType == RecordType::PhyState &&
+           item.phyStateDurationNs > 0 &&
+           item.phyStateEndNs > item.phyStateStartNs;
+}
+
 static QVector<int> collectChannels(const QVector<PpduVisualItem> &items)
 {
     QMap<int, bool> channelMap;
@@ -588,34 +614,60 @@ static QVector<int> collectChannels(const QVector<PpduVisualItem> &items)
     return channels;
 }
 
-static QVector<PhyStateSegment> collectPhyStateSegments(const QVector<PpduVisualItem> &items)
+static QVector<MloChannelRow>
+collectMloChannelRows(const QVector<PpduVisualItem> &ppduItems,
+                      const QVector<PpduVisualItem> &phyStateItems,
+                      const QHash<uint16_t, uint64_t> &nodeToMacMap,
+                      const QHash<uint64_t, DeviceNodeInfo> &deviceInfoMap)
 {
-    QVector<PhyStateSegment> segments;
-    segments.reserve(items.size());
+    QMap<uint64_t, MloChannelRow> rowMap;
 
-    for (const auto &item : items)
+    auto roleForNode = [&](uint16_t nodeId, DeviceRole fallback) {
+        if (fallback != DeviceRole::Unknown)
+            return fallback;
+        const uint64_t mac = nodeToMacMap.value(nodeId, 0);
+        if (mac != 0 && deviceInfoMap.contains(mac))
+            return deviceInfoMap.value(mac).role;
+        return DeviceRole::Unknown;
+    };
+
+    auto addRow = [&](uint16_t nodeId, uint8_t linkId, uint8_t channel, DeviceRole role) {
+        if (channel == 0)
+            return;
+        const uint64_t key = nodeLinkChannelRowKey(nodeId, linkId, channel);
+        if (rowMap.contains(key))
+            return;
+        const DeviceRole resolvedRole = roleForNode(nodeId, role);
+        rowMap.insert(key,
+                      MloChannelRow{key,
+                                    nodeId,
+                                    linkId,
+                                    channel,
+                                    resolvedRole,
+                                    QString("%1 %2 / L%3 / CH%4")
+                                        .arg(deviceRoleName(resolvedRole))
+                                        .arg(nodeId)
+                                        .arg(linkId)
+                                        .arg(channel)});
+    };
+
+    for (const auto &item : ppduItems)
     {
-        if (item.recordType != RecordType::PhyState || item.phyStateDurationNs == 0)
-            continue;
-
-        segments.push_back({
-            phyRowKey(item.nodeId, item.channel_number),
-            item.nodeId,
-            item.channel_number,
-            item.phyStateStartNs,
-            item.phyStateEndNs,
-            toPhyStateKind(item.phyState)});
+        if (isDrawablePpdu(item))
+            addRow(item.nodeId, item.linkId, item.channel_number, item.deviceRole);
     }
 
-    std::sort(segments.begin(), segments.end(),
-              [](const PhyStateSegment &a, const PhyStateSegment &b) {
-                  if (a.rowKey != b.rowKey)
-                      return a.rowKey < b.rowKey;
-                  if (a.startNs != b.startNs)
-                      return a.startNs < b.startNs;
-                  return a.endNs < b.endNs;
-              });
-    return segments;
+    for (const auto &item : phyStateItems)
+    {
+        if (item.recordType == RecordType::PhyState && item.phyStateDurationNs > 0)
+            addRow(item.nodeId, item.linkId, item.channel_number, item.deviceRole);
+    }
+
+    QVector<MloChannelRow> rows;
+    rows.reserve(rowMap.size());
+    for (auto it = rowMap.cbegin(); it != rowMap.cend(); ++it)
+        rows.push_back(it.value());
+    return rows;
 }
 
 static QVector<ChannelStateSegment> buildChannelStateSegments(
@@ -796,10 +848,10 @@ void PpduTimelineView::setDetailWindow(PpduDetailWindow *detailWindow)
 // ★ NEW
 uint64_t PpduTimelineView::rowKey(const PpduVisualItem &ppdu) const
 {
-    if (m_rowMode == TimelineRowMode::ByChannel)
-        return static_cast<uint64_t>(ppdu.channel_number);
-    if (m_rowMode == TimelineRowMode::ByNodeLink)
-        return phyRowKey(ppdu.nodeId, ppdu.channel_number);
+	    if (m_rowMode == TimelineRowMode::ByChannel)
+	        return static_cast<uint64_t>(ppdu.channel_number);
+	    if (m_rowMode == TimelineRowMode::ByNodeLink)
+	        return nodeLinkRowKey(ppdu.nodeId, ppdu.linkId);
 
     return ppdu.sender;
 }
@@ -807,6 +859,42 @@ uint64_t PpduTimelineView::rowKey(const PpduVisualItem &ppdu) const
 DeviceRole PpduTimelineView::deviceRole(uint64_t mac) const
 {
     return m_deviceInfoMap.value(mac, DeviceNodeInfo{}).role;
+}
+
+DeviceRole PpduTimelineView::deviceRoleForNode(uint16_t nodeId) const
+{
+    const uint64_t mac = m_nodeToMacMap.value(nodeId, 0);
+    if (mac != 0 && m_deviceInfoMap.contains(mac))
+        return m_deviceInfoMap.value(mac).role;
+    return DeviceRole::Unknown;
+}
+
+QString PpduTimelineView::nodeRoleLabel(uint16_t nodeId) const
+{
+    DeviceRole role = deviceRoleForNode(nodeId);
+    if (role == DeviceRole::Unknown)
+    {
+        for (const auto &item : m_ppduItems)
+        {
+            if (item.nodeId == nodeId && item.deviceRole != DeviceRole::Unknown)
+            {
+                role = item.deviceRole;
+                break;
+            }
+        }
+    }
+    if (role == DeviceRole::Unknown)
+    {
+        for (const auto &item : m_phyStateItems)
+        {
+            if (item.nodeId == nodeId && item.deviceRole != DeviceRole::Unknown)
+            {
+                role = item.deviceRole;
+                break;
+            }
+        }
+    }
+    return QString("%1 %2").arg(deviceRoleName(role)).arg(nodeId);
 }
 
 uint16_t PpduTimelineView::nodeIdForMac(uint64_t mac) const
@@ -932,12 +1020,20 @@ void PpduTimelineView::onToggleChannelView()
 {
     switch (m_viewMode)
     {
-    case TimelineViewMode::PpduTimeline:
-        m_viewMode = TimelineViewMode::ChannelState;
-        m_rowMode = TimelineRowMode::ByChannel;
-        break;
-    case TimelineViewMode::ChannelState:
-        m_viewMode = TimelineViewMode::PhyStateTimeline;
+	    case TimelineViewMode::PpduTimeline:
+	        m_viewMode = TimelineViewMode::MloChannelTimeline;
+	        m_rowMode = TimelineRowMode::ByNodeLink;
+	        break;
+	    case TimelineViewMode::MloChannelTimeline:
+	        m_viewMode = TimelineViewMode::MloChannelState;
+	        m_rowMode = TimelineRowMode::ByNodeLink;
+	        break;
+	    case TimelineViewMode::MloChannelState:
+	        m_viewMode = TimelineViewMode::ChannelState;
+	        m_rowMode = TimelineRowMode::ByChannel;
+	        break;
+	    case TimelineViewMode::ChannelState:
+	        m_viewMode = TimelineViewMode::PhyStateTimeline;
         m_rowMode = TimelineRowMode::ByNodeLink;
         break;
     case TimelineViewMode::PhyStateTimeline:
@@ -959,10 +1055,18 @@ void PpduTimelineView::updateModeButton()
 {
     switch (m_viewMode)
     {
-    case TimelineViewMode::PpduTimeline:
-        m_btnChannel->setText("CH");
-        m_btnChannel->setToolTip("Switch to channel PPDU view");
-        break;
+	    case TimelineViewMode::PpduTimeline:
+	        m_btnChannel->setText("MLO");
+	        m_btnChannel->setToolTip("Switch to MLO channel timeline");
+	        break;
+	    case TimelineViewMode::MloChannelTimeline:
+	        m_btnChannel->setText("MLO CH");
+	        m_btnChannel->setToolTip("Switch to MLO channel state view");
+	        break;
+	    case TimelineViewMode::MloChannelState:
+	        m_btnChannel->setText("CH");
+	        m_btnChannel->setToolTip("Switch to aggregate channel state view");
+	        break;
     case TimelineViewMode::ChannelState:
         m_btnChannel->setText("PHY");
         m_btnChannel->setToolTip("Switch to PHY state view");
@@ -979,12 +1083,18 @@ std::pair<uint64_t, uint64_t> PpduTimelineView::currentTimeBounds() const
     const QVector<PpduVisualItem> *items = nullptr;
 
     if (m_viewMode == TimelineViewMode::PhyStateTimeline)
+    {
+        ensurePhyStateCache();
         items = &m_phyStateItems;
-    else
-        items = &m_ppduItems;
+    }
+	    else
+	        items = &m_ppduItems;
 
     if (items->isEmpty())
         return {0, 0};
+
+    if (m_viewMode == TimelineViewMode::PhyStateTimeline && m_phyStateEndNs > m_phyStateStartNs)
+        return {m_phyStateStartNs, m_phyStateEndNs};
 
     uint64_t startNs = std::numeric_limits<uint64_t>::max();
     uint64_t endNs = 0;
@@ -995,6 +1105,8 @@ std::pair<uint64_t, uint64_t> PpduTimelineView::currentTimeBounds() const
             item.recordType == RecordType::PhyState ? item.phyStateStartNs : item.txStartNs;
         const uint64_t itemEnd =
             item.recordType == RecordType::PhyState ? item.phyStateEndNs : item.txEndNs;
+        if (itemEnd <= itemStart)
+            continue;
         startNs = std::min(startNs, itemStart);
         endNs = std::max(endNs, itemEnd);
     }
@@ -1062,9 +1174,27 @@ void PpduTimelineView::scheduleDataUpdate()
     });
 }
 
+void PpduTimelineView::schedulePhyStateDataUpdate()
+{
+    if (m_phyStateUpdateQueued)
+        return;
+
+    m_phyStateUpdateQueued = true;
+    QTimer::singleShot(80, this, [this]() {
+        m_phyStateUpdateQueued = false;
+        if (m_viewMode == TimelineViewMode::PhyStateTimeline)
+            update();
+    });
+}
+
 void PpduTimelineView::markPpduLayoutDirty()
 {
     m_ppduLayoutDirty = true;
+}
+
+void PpduTimelineView::markPhyStateCacheDirty()
+{
+    m_phyStateCacheDirty = true;
 }
 
 void PpduTimelineView::ensurePpduLayoutCache() const
@@ -1073,6 +1203,14 @@ void PpduTimelineView::ensurePpduLayoutCache() const
         return;
 
     const_cast<PpduTimelineView*>(this)->rebuildPpduLayoutCache();
+}
+
+void PpduTimelineView::ensurePhyStateCache() const
+{
+    if (!m_phyStateCacheDirty)
+        return;
+
+    const_cast<PpduTimelineView*>(this)->rebuildPhyStateCache();
 }
 
 void PpduTimelineView::rebuildPpduLayoutCache()
@@ -1109,14 +1247,41 @@ void PpduTimelineView::rebuildPpduLayoutCache()
 
     for (auto& row : m_cachedPpduRows)
     {
-        if (m_rowMode == TimelineRowMode::ByChannel)
-        {
-            row.label = QString("CH %1").arg(row.rowKey);
-        }
-        else
-        {
-            row.label = roleLabel(row.rowKey);
-        }
+	        if (m_rowMode == TimelineRowMode::ByChannel)
+	        {
+	            row.label = QString("CH %1").arg(row.rowKey);
+	        }
+	        else if (m_rowMode == TimelineRowMode::ByNodeLink)
+	        {
+	            const int idx = row.itemIndices.isEmpty() ? -1 : row.itemIndices.first();
+	            if (idx >= 0 && idx < m_ppduItems.size())
+	            {
+	                const auto& item = m_ppduItems[idx];
+	                row.label = QString("%1 / L%2 / CH%3")
+	                                .arg(nodeRoleLabel(item.nodeId))
+	                                .arg(item.linkId)
+	                                .arg(item.channel_number);
+	            }
+	            else
+	            {
+	                row.label = QString("MLO Link");
+	            }
+	        }
+	        else
+	        {
+	            row.label = roleLabel(row.rowKey);
+	            const int idx = row.itemIndices.isEmpty() ? -1 : row.itemIndices.first();
+	            if (row.label.startsWith("DEV") && idx >= 0 && idx < m_ppduItems.size())
+	            {
+	                const auto& item = m_ppduItems[idx];
+	                const DeviceRole rowRole = item.deviceRole != DeviceRole::Unknown
+	                                               ? item.deviceRole
+	                                               : deviceRoleForNode(item.nodeId);
+	                row.label = QString("%1 %2")
+	                                .arg(deviceRoleName(rowRole))
+	                                .arg(item.nodeId);
+	            }
+	        }
 
         QVector<int> sorted = row.itemIndices;
         std::sort(sorted.begin(), sorted.end(), [this](int a, int b) {
@@ -1174,6 +1339,71 @@ void PpduTimelineView::rebuildPpduLayoutCache()
     m_ppduLayoutDirty = false;
 }
 
+void PpduTimelineView::rebuildPhyStateCache()
+{
+    m_cachedPhyStateRows.clear();
+    m_phyStateStartNs = 0;
+    m_phyStateEndNs = 0;
+
+    if (m_phyStateItems.isEmpty())
+    {
+        m_phyStateCacheDirty = false;
+        return;
+    }
+
+    QMap<uint64_t, int> rowMap;
+    uint64_t globalStartNs = std::numeric_limits<uint64_t>::max();
+    uint64_t globalEndNs = 0;
+
+    for (int i = 0; i < m_phyStateItems.size(); ++i)
+    {
+        const auto &item = m_phyStateItems[i];
+        if (!isDrawablePhyState(item))
+            continue;
+
+        const uint64_t key = nodeLinkRowKey(item.nodeId, item.linkId);
+        int row = rowMap.value(key, -1);
+        if (row < 0)
+        {
+            row = m_cachedPhyStateRows.size();
+            rowMap.insert(key, row);
+            m_cachedPhyStateRows.push_back(
+                CachedPhyStateRow{key,
+                                  QString("%1 / L%2 / CH%3")
+                                      .arg(nodeRoleLabel(item.nodeId))
+                                      .arg(item.linkId)
+                                      .arg(item.channel_number),
+                                  item.nodeId,
+                                  item.linkId,
+                                  item.channel_number,
+                                  {}});
+        }
+
+        m_cachedPhyStateRows[row].itemIndices.push_back(i);
+        globalStartNs = std::min(globalStartNs, item.phyStateStartNs);
+        globalEndNs = std::max(globalEndNs, item.phyStateEndNs);
+    }
+
+    for (auto &row : m_cachedPhyStateRows)
+    {
+        std::sort(row.itemIndices.begin(), row.itemIndices.end(), [this](int a, int b) {
+            const auto &lhs = m_phyStateItems[a];
+            const auto &rhs = m_phyStateItems[b];
+            if (lhs.phyStateStartNs != rhs.phyStateStartNs)
+                return lhs.phyStateStartNs < rhs.phyStateStartNs;
+            return lhs.phyStateEndNs < rhs.phyStateEndNs;
+        });
+    }
+
+    if (globalStartNs != std::numeric_limits<uint64_t>::max() && globalStartNs < globalEndNs)
+    {
+        m_phyStateStartNs = globalStartNs;
+        m_phyStateEndNs = globalEndNs;
+    }
+
+    m_phyStateCacheDirty = false;
+}
+
 /* ======================== Culculate the number of APs =================== */
 
 int PpduTimelineView::apCount() const
@@ -1205,13 +1435,18 @@ int PpduTimelineView::timelineTopY() const
 void PpduTimelineView::append(const PpduVisualItem &ppdu)
 {
     if (ppdu.recordType == RecordType::DeviceRole)
-    {
+	    {
         if (ppdu.roleMac != 0)
         {
             m_deviceInfoMap.insert(ppdu.roleMac, DeviceNodeInfo{ppdu.nodeId, ppdu.deviceRole});
             m_nodeToMacMap.insert(ppdu.nodeId, ppdu.roleMac);
         }
+        else if (ppdu.deviceRole != DeviceRole::Unknown)
+        {
+            m_nodeToMacMap.insert(ppdu.nodeId, 0);
+        }
         markPpduLayoutDirty();
+        markPhyStateCacheDirty();
         scheduleDataUpdate();
         return;
     }
@@ -1220,12 +1455,13 @@ void PpduTimelineView::append(const PpduVisualItem &ppdu)
     {
         PpduVisualItem fixed = ppdu;
         m_phyStateItems.append(fixed);
+        markPhyStateCacheDirty();
         if (m_ppduItems.isEmpty() && m_phyStateItems.size() == 1)
             m_viewStartNs = fixed.phyStateStartNs;
-        scheduleDataUpdate();
+        schedulePhyStateDataUpdate();
         return;
     }
-    if (ppdu.recordType == RecordType::PpduUpdate)
+	    if (ppdu.recordType == RecordType::PpduUpdate)
     {
         for (int i = m_ppduItems.size() - 1; i >= 0; --i)
         {
@@ -1242,8 +1478,8 @@ void PpduTimelineView::append(const PpduVisualItem &ppdu)
         return;
     }
 
-    if (ppdu.recordType != RecordType::Ppdu)
-        return;
+	    if (ppdu.recordType != RecordType::Ppdu)
+	        return;
 
     static uint64_t ppduCount = 0;
     ppduCount++;
@@ -1287,7 +1523,13 @@ void PpduTimelineView::clear()
     m_seenPpduKeys.clear();
     m_cachedPpduLayout.clear();
     m_cachedPpduRows.clear();
+    m_cachedPhyStateRows.clear();
     m_ppduLayoutDirty = true;
+    m_phyStateCacheDirty = true;
+    m_phyStateStartNs = 0;
+    m_phyStateEndNs = 0;
+    m_dataUpdateQueued = false;
+    m_phyStateUpdateQueued = false;
     m_hoverIndex = -1;
     m_selectedIndex = -1;
     m_pressedIndex = -1;
@@ -1383,6 +1625,12 @@ void PpduTimelineView::paintEvent(QPaintEvent *)
         return;
     }
 
+    if (m_viewMode == TimelineViewMode::MloChannelState)
+    {
+        paintMloChannelStateView(painter);
+        return;
+    }
+
     if (m_viewMode == TimelineViewMode::PhyStateTimeline)
     {
         paintPhyStateTimeline(painter);
@@ -1444,19 +1692,35 @@ void PpduTimelineView::paintPpduTimeline(QPainter &painter)
                          Qt::AlignVCenter | Qt::AlignLeft,
                          rowInfo.label);
 
-        if (labelRect.contains(m_mousePos))
-        {
-            if (m_rowMode == TimelineRowMode::ByChannel)
-            {
+	        if (labelRect.contains(m_mousePos))
+	        {
+	            if (m_rowMode == TimelineRowMode::ByChannel)
+	            {
                 const int ch = static_cast<int>(rowInfo.rowKey);
                 QToolTip::showText(mapToGlobal(QPoint(8, y)),
-                                   QString("Channel %1 (%2)").arg(ch).arg(channelBand(ch)),
-                                   this);
-            }
-            else
-            {
-                QToolTip::showText(mapToGlobal(QPoint(8, y)), roleTooltip(rowInfo.rowKey), this);
-            }
+	                                   QString("Channel %1 (%2)").arg(ch).arg(channelBand(ch)),
+	                                   this);
+	            }
+	            else if (m_rowMode == TimelineRowMode::ByNodeLink)
+	            {
+	                const int idx = rowInfo.itemIndices.isEmpty() ? -1 : rowInfo.itemIndices.first();
+	                if (idx >= 0 && idx < m_ppduItems.size())
+	                {
+	                    const auto& item = m_ppduItems[idx];
+	                    QToolTip::showText(
+	                        mapToGlobal(QPoint(8, y)),
+	                        QString("%1\nLink %2\nChannel %3 (%4)")
+	                            .arg(nodeRoleLabel(item.nodeId))
+	                            .arg(item.linkId)
+	                            .arg(item.channel_number)
+	                            .arg(channelBand(item.channel_number)),
+	                        this);
+	                }
+	            }
+	            else
+	            {
+	                QToolTip::showText(mapToGlobal(QPoint(8, y)), roleTooltip(rowInfo.rowKey), this);
+	            }
         }
     }
     painter.setPen(QColor(180, 180, 180));
@@ -1777,36 +2041,175 @@ void PpduTimelineView::paintChannelStateView(QPainter &painter)
     }
 }
 
-void PpduTimelineView::paintPhyStateTimeline(QPainter &painter)
+void PpduTimelineView::paintMloChannelStateView(QPainter &painter)
 {
-    if (m_phyStateItems.isEmpty())
+    if (m_ppduItems.isEmpty() && m_phyStateItems.isEmpty())
         return;
 
-    const QVector<PhyStateSegment> segments = collectPhyStateSegments(m_phyStateItems);
-    if (segments.isEmpty())
+    const QVector<MloChannelRow> rows =
+        collectMloChannelRows(m_ppduItems, m_phyStateItems, m_nodeToMacMap, m_deviceInfoMap);
+    if (rows.isEmpty())
         return;
 
-    QMap<uint64_t, int> rowMap;
-    QMap<uint64_t, QString> rowLabelMap;
     uint64_t globalStartNs = std::numeric_limits<uint64_t>::max();
     uint64_t globalEndNs = 0;
-
-    for (const auto &segment : segments)
+    for (const auto &item : m_ppduItems)
     {
-        if (!rowMap.contains(segment.rowKey))
-        {
-            rowMap[segment.rowKey] = rowMap.size();
-            rowLabelMap[segment.rowKey] =
-                QString("N%1 / CH%2").arg(segment.nodeId).arg(segment.channel);
-        }
-        globalStartNs = std::min(globalStartNs, segment.startNs);
-        globalEndNs = std::max(globalEndNs, segment.endNs);
+        if (!isDrawablePpdu(item))
+            continue;
+        globalStartNs = std::min(globalStartNs, item.txStartNs);
+        globalEndNs = std::max(globalEndNs, item.txEndNs);
     }
 
     if (globalStartNs >= globalEndNs)
         return;
 
-    const int rowCount = rowMap.size();
+    const int rowCount = rows.size();
+    const int availH = height() - m_topMargin - kBottomMargin;
+    const int rowH = std::clamp(availH / std::max(1, rowCount), 22, 84);
+    int topY = m_topMargin;
+    if (availH > rowCount * rowH)
+        topY += (availH - rowCount * rowH) / 2;
+
+    painter.setPen(QColor(200, 200, 200));
+    for (int r = 0; r <= rowCount; ++r)
+    {
+        const int y = topY + r * rowH;
+        painter.drawLine(m_leftMargin, y, width(), y);
+    }
+
+    painter.setPen(QColor(90, 90, 90));
+    painter.drawText(m_leftMargin, 16, "MLO Channel State View");
+
+    painter.setPen(Qt::black);
+    for (int row = 0; row < rows.size(); ++row)
+    {
+        const int y = topY + row * rowH + rowH / 2;
+        painter.setBrush(senderColor(rows[row].rowKey));
+        painter.setPen(Qt::NoPen);
+        painter.drawEllipse(QRectF(12, y - 5, 10, 10));
+        painter.setPen(QColor(25, 32, 40));
+        painter.drawText(QRect(28, topY + row * rowH, m_leftMargin - 36, rowH),
+                         Qt::AlignVCenter | Qt::AlignLeft,
+                         rows[row].label);
+    }
+
+    painter.setPen(QColor(180, 180, 180));
+    painter.drawLine(m_leftMargin - 8, topY, m_leftMargin - 8, topY + rowCount * rowH);
+
+    const uint64_t visibleStartNs = std::max<uint64_t>(0, m_viewStartNs);
+    const uint64_t visibleEndNs =
+        visibleStartNs + std::max<int>(1, width()) / m_nsToPixel;
+
+    for (int row = 0; row < rows.size(); ++row)
+    {
+        const auto &rowInfo = rows[row];
+        const QVector<ChannelStateSegment> segments =
+            buildChannelStateSegments(m_ppduItems, rowInfo.channel, globalStartNs, globalEndNs);
+
+        for (const auto &segment : segments)
+        {
+            const uint64_t drawStartNs = std::max(segment.startNs, visibleStartNs);
+            const uint64_t drawEndNs = std::min(segment.endNs, visibleEndNs);
+            if (drawStartNs >= drawEndNs)
+                continue;
+
+            QRectF rect(
+                m_leftMargin + (drawStartNs - visibleStartNs) * m_nsToPixel,
+                topY + row * rowH + kLanePadding,
+                std::max(1.0, (drawEndNs - drawStartNs) * m_nsToPixel),
+                rowH - 2 * kLanePadding);
+
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(channelStateColor(segment.state));
+            painter.drawRoundedRect(rect, 3, 3);
+
+            painter.setPen(QColor(70, 70, 70, 100));
+            painter.setBrush(Qt::NoBrush);
+            painter.drawRoundedRect(rect, 3, 3);
+
+            if (rect.width() >= 52)
+            {
+                painter.setPen(segment.state == ChannelStateKind::Idle
+                                   ? QColor(40, 40, 40)
+                                   : Qt::white);
+                painter.drawText(rect.adjusted(6, 0, -6, 0),
+                                 Qt::AlignVCenter | Qt::AlignLeft,
+                                 channelStateName(segment.state));
+            }
+        }
+    }
+
+    const QPen gridPen(QColor(180, 180, 180), 1, Qt::DashLine);
+    painter.setPen(gridPen);
+    for (int i = 0; i <= 10; ++i)
+    {
+        const uint64_t ns =
+            visibleStartNs + i * (visibleEndNs - visibleStartNs) / 10;
+        const int x = m_leftMargin + (ns - visibleStartNs) * m_nsToPixel;
+        painter.drawLine(x, topY, x, topY + rowCount * rowH);
+        painter.drawText(x - 20,
+                         topY + rowCount * rowH + 15,
+                         QString::number(ns / 1e6, 'f', 2) + " ms");
+    }
+
+    if (m_selecting)
+    {
+        const int left = std::clamp(std::min(m_selectStart.x(), m_selectEnd.x()),
+                                    m_leftMargin,
+                                    width() - 5);
+        const int right = std::clamp(std::max(m_selectStart.x(), m_selectEnd.x()),
+                                     m_leftMargin,
+                                     width() - 5);
+
+        if (right > left)
+        {
+            const QRectF selectionRect(left, topY, right - left, rowCount * rowH);
+            painter.setPen(QPen(kSelectBorder, 1, Qt::DashLine));
+            painter.setBrush(kSelectFill);
+            painter.drawRect(selectionRect);
+        }
+    }
+
+    const int barY = height() - kRangeBarHeight - kRangeBarBottomPadding;
+    const int barX = m_leftMargin;
+    const int barW = width() - m_leftMargin - kRangeBarMargin;
+
+    if (barW > 50)
+    {
+        const int leftX = barX + m_rangeStart * barW;
+        const int rightX = barX + m_rangeEnd * barW;
+
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(180, 185, 190));
+        painter.drawRoundedRect(QRectF(barX, barY + kRangeBarHeight / 2 - 2, barW, 4), 2, 2);
+
+        painter.setBrush(QColor(90, 140, 255, 120));
+        painter.drawRoundedRect(QRectF(leftX, barY, rightX - leftX, kRangeBarHeight), 4, 4);
+
+        painter.setBrush(QColor(240, 240, 240));
+        painter.drawRoundedRect(QRectF(leftX - kRangeHandleW / 2,
+                                       barY,
+                                       kRangeHandleW,
+                                       kRangeBarHeight),
+                                3,
+                                3);
+        painter.drawRoundedRect(QRectF(rightX - kRangeHandleW / 2,
+                                       barY,
+                                       kRangeHandleW,
+                                       kRangeBarHeight),
+                                3,
+                                3);
+    }
+}
+
+void PpduTimelineView::paintPhyStateTimeline(QPainter &painter)
+{
+    ensurePhyStateCache();
+    if (m_cachedPhyStateRows.isEmpty() || m_phyStateStartNs >= m_phyStateEndNs)
+        return;
+
+    const int rowCount = m_cachedPhyStateRows.size();
     const int availH = height() - m_topMargin - kBottomMargin;
     const int rowH = std::clamp(availH / std::max(1, rowCount), 22, 84);
     int topY = m_topMargin;
@@ -1824,11 +2227,10 @@ void PpduTimelineView::paintPhyStateTimeline(QPainter &painter)
     painter.drawText(m_leftMargin, 16, "PHY State View");
 
     painter.setPen(Qt::black);
-    for (auto it = rowMap.cbegin(); it != rowMap.cend(); ++it)
+    for (int row = 0; row < m_cachedPhyStateRows.size(); ++row)
     {
-        const int row = it.value();
         const int y = topY + row * rowH + rowH / 2;
-        painter.drawText(8, y + 5, rowLabelMap.value(it.key()));
+        painter.drawText(8, y + 5, m_cachedPhyStateRows[row].label);
     }
 
     painter.setPen(QColor(180, 180, 180));
@@ -1838,39 +2240,85 @@ void PpduTimelineView::paintPhyStateTimeline(QPainter &painter)
     const uint64_t visibleEndNs =
         visibleStartNs + std::max<int>(1, width()) / m_nsToPixel;
 
-    for (const auto &segment : segments)
+    for (int row = 0; row < m_cachedPhyStateRows.size(); ++row)
     {
-        const uint64_t drawStartNs = std::max(segment.startNs, visibleStartNs);
-        const uint64_t drawEndNs = std::min(segment.endNs, visibleEndNs);
-        if (drawStartNs >= drawEndNs)
+        const auto &rowInfo = m_cachedPhyStateRows[row];
+        const auto &indices = rowInfo.itemIndices;
+        if (indices.isEmpty())
             continue;
 
-        const int row = rowMap.value(segment.rowKey, -1);
-        if (row < 0)
-            continue;
+        const auto firstIt =
+            std::lower_bound(indices.cbegin(), indices.cend(), visibleStartNs,
+                             [this](int itemIndex, uint64_t value) {
+                                 return m_phyStateItems[itemIndex].phyStateStartNs < value;
+                             });
+        auto drawIt = firstIt;
+        if (drawIt != indices.cbegin())
+            --drawIt;
 
-        QRectF rect(
-            m_leftMargin + (drawStartNs - visibleStartNs) * m_nsToPixel,
-            topY + row * rowH + kLanePadding,
-            std::max(1.0, (drawEndNs - drawStartNs) * m_nsToPixel),
-            rowH - 2 * kLanePadding);
+        QRectF pendingRect;
+        PhyStateKindView pendingState = PhyStateKindView::Other;
+        bool hasPending = false;
+        auto flushPending = [&]() {
+            if (!hasPending)
+                return;
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(phyStateColor(pendingState));
+            if (pendingRect.width() < 3.0 || pendingRect.height() < 8.0)
+            {
+                painter.drawRect(pendingRect);
+            }
+            else
+            {
+                painter.drawRoundedRect(pendingRect, 3, 3);
+                painter.setPen(QColor(70, 70, 70, 100));
+                painter.setBrush(Qt::NoBrush);
+                painter.drawRoundedRect(pendingRect, 3, 3);
+            }
+            if (pendingRect.width() >= 62)
+            {
+                painter.setPen(pendingState == PhyStateKindView::Idle ? QColor(40, 40, 40) : Qt::white);
+                painter.drawText(pendingRect.adjusted(6, 0, -6, 0),
+                                 Qt::AlignVCenter | Qt::AlignLeft,
+                                 phyStateName(pendingState));
+            }
+            hasPending = false;
+        };
 
-        const auto state = segment.state;
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(phyStateColor(state));
-        painter.drawRoundedRect(rect, 3, 3);
-
-        painter.setPen(QColor(70, 70, 70, 100));
-        painter.setBrush(Qt::NoBrush);
-        painter.drawRoundedRect(rect, 3, 3);
-
-        if (rect.width() >= 62)
+        for (auto it = drawIt; it != indices.cend(); ++it)
         {
-            painter.setPen(state == PhyStateKindView::Idle ? QColor(40, 40, 40) : Qt::white);
-            painter.drawText(rect.adjusted(6, 0, -6, 0),
-                             Qt::AlignVCenter | Qt::AlignLeft,
-                             phyStateName(state));
+            const auto &segment = m_phyStateItems[*it];
+            if (segment.phyStateStartNs > visibleEndNs)
+                break;
+
+            const uint64_t drawStartNs = std::max(segment.phyStateStartNs, visibleStartNs);
+            const uint64_t drawEndNs = std::min(segment.phyStateEndNs, visibleEndNs);
+            if (drawStartNs >= drawEndNs)
+                continue;
+
+            QRectF rect(
+                m_leftMargin + (drawStartNs - visibleStartNs) * m_nsToPixel,
+                topY + row * rowH + kLanePadding,
+                std::max(1.0, (drawEndNs - drawStartNs) * m_nsToPixel),
+                rowH - 2 * kLanePadding);
+
+            const auto state = toPhyStateKind(segment.phyState);
+            if (hasPending &&
+                pendingState == state &&
+                rect.left() <= pendingRect.right() + 0.75 &&
+                rect.width() < 3.0 &&
+                pendingRect.width() < 24.0)
+            {
+                pendingRect = pendingRect.united(rect);
+                continue;
+            }
+
+            flushPending();
+            pendingRect = rect;
+            pendingState = state;
+            hasPending = true;
         }
+        flushPending();
     }
 
     const QPen gridPen(QColor(180, 180, 180), 1, Qt::DashLine);
@@ -2139,7 +2587,10 @@ void PpduTimelineView::mousePressEvent(QMouseEvent *e)
 
     if (e->button() == Qt::LeftButton)
     {
-        m_pressedIndex = (m_viewMode == TimelineViewMode::PpduTimeline) ? hitTest(e->pos()) : -1;
+	        m_pressedIndex = (m_viewMode == TimelineViewMode::PpduTimeline ||
+	                          m_viewMode == TimelineViewMode::MloChannelTimeline)
+	                             ? hitTest(e->pos())
+	                             : -1;
         m_pressMoved = false;
         m_dragging = true;
         m_pressPos = e->pos();
@@ -2233,6 +2684,15 @@ void PpduTimelineView::mouseMoveEvent(QMouseEvent *e)
         return;
     }
 
+    if (m_viewMode == TimelineViewMode::MloChannelState)
+    {
+        m_hoverIndex = -1;
+        if (!showMloChannelStateHover(e->pos()))
+            m_overlay->close();
+        update();
+        return;
+    }
+
     if (m_viewMode == TimelineViewMode::PhyStateTimeline)
     {
         m_hoverIndex = -1;
@@ -2257,7 +2717,9 @@ void PpduTimelineView::mouseReleaseEvent(QMouseEvent *e)
     {
         m_dragging = false;
         setCursor(Qt::ArrowCursor);
-        if (!m_pressMoved && m_pressedIndex >= 0 && m_viewMode == TimelineViewMode::PpduTimeline)
+	        if (!m_pressMoved && m_pressedIndex >= 0 &&
+	            (m_viewMode == TimelineViewMode::PpduTimeline ||
+	             m_viewMode == TimelineViewMode::MloChannelTimeline))
         {
             m_selectedIndex = m_pressedIndex;
             updateDetailWindow(m_selectedIndex);
@@ -2296,7 +2758,8 @@ void PpduTimelineView::mouseReleaseEvent(QMouseEvent *e)
 
         if (endNs > startNs)
         {
-            if (m_viewMode == TimelineViewMode::PpduTimeline)
+	            if (m_viewMode == TimelineViewMode::PpduTimeline ||
+	                m_viewMode == TimelineViewMode::MloChannelTimeline)
             {
                 auto stats = computeStats(startNs, endNs);
 
@@ -2490,36 +2953,30 @@ bool PpduTimelineView::showChannelStateHover(const QPoint &pos)
     return false;
 }
 
-bool PpduTimelineView::showPhyStateHover(const QPoint &pos)
+bool PpduTimelineView::showMloChannelStateHover(const QPoint &pos)
 {
-    if (m_phyStateItems.isEmpty())
+    if (m_ppduItems.isEmpty() && m_phyStateItems.isEmpty())
         return false;
 
-    const QVector<PhyStateSegment> segments = collectPhyStateSegments(m_phyStateItems);
-    if (segments.isEmpty())
+    const QVector<MloChannelRow> rows =
+        collectMloChannelRows(m_ppduItems, m_phyStateItems, m_nodeToMacMap, m_deviceInfoMap);
+    if (rows.isEmpty())
         return false;
 
-    QMap<uint64_t, int> rowMap;
-    QMap<uint64_t, QString> rowLabelMap;
     uint64_t globalStartNs = std::numeric_limits<uint64_t>::max();
     uint64_t globalEndNs = 0;
-
-    for (const auto &segment : segments)
+    for (const auto &item : m_ppduItems)
     {
-        if (!rowMap.contains(segment.rowKey))
-        {
-            rowMap[segment.rowKey] = rowMap.size();
-            rowLabelMap[segment.rowKey] =
-                QString("Node %1 / Link CH %2").arg(segment.nodeId).arg(segment.channel);
-        }
-        globalStartNs = std::min(globalStartNs, segment.startNs);
-        globalEndNs = std::max(globalEndNs, segment.endNs);
+        if (!isDrawablePpdu(item))
+            continue;
+        globalStartNs = std::min(globalStartNs, item.txStartNs);
+        globalEndNs = std::max(globalEndNs, item.txEndNs);
     }
 
     if (globalStartNs >= globalEndNs)
         return false;
 
-    const int rowCount = rowMap.size();
+    const int rowCount = rows.size();
     const int availH = height() - m_topMargin - kBottomMargin;
     const int rowH = std::clamp(availH / std::max(1, rowCount), 22, 84);
     int topY = m_topMargin;
@@ -2530,32 +2987,131 @@ bool PpduTimelineView::showPhyStateHover(const QPoint &pos)
     const uint64_t visibleEndNs =
         visibleStartNs + std::max<int>(1, width()) / m_nsToPixel;
 
-    for (auto it = rowMap.cbegin(); it != rowMap.cend(); ++it)
+    for (int row = 0; row < rows.size(); ++row)
     {
-        const int row = it.value();
+        const auto &rowInfo = rows[row];
         const QRect labelRect(0, topY + row * rowH, m_leftMargin - 10, rowH);
         if (labelRect.contains(pos))
         {
-            m_overlay->setText(rowLabelMap.value(it.key()));
+            const QString text =
+                QString("%1\nLink: %2\nChannel: %3 (%4)")
+                    .arg(rowInfo.label)
+                    .arg(rowInfo.linkId)
+                    .arg(rowInfo.channel)
+                    .arg(channelBand(rowInfo.channel));
+
+            m_overlay->setText(text);
+            m_overlay->showAt(mapToGlobal(pos) + QPoint(12, 12));
+            return true;
+        }
+
+        const QVector<ChannelStateSegment> segments =
+            buildChannelStateSegments(m_ppduItems,
+                                      rowInfo.channel,
+                                      globalStartNs,
+                                      globalEndNs);
+
+        for (const auto &segment : segments)
+        {
+            const uint64_t drawStartNs = std::max(segment.startNs, visibleStartNs);
+            const uint64_t drawEndNs = std::min(segment.endNs, visibleEndNs);
+            if (drawStartNs >= drawEndNs)
+                continue;
+
+            const QRectF rect(
+                m_leftMargin + (drawStartNs - visibleStartNs) * m_nsToPixel,
+                topY + row * rowH + kLanePadding,
+                std::max(1.0, (drawEndNs - drawStartNs) * m_nsToPixel),
+                rowH - 2 * kLanePadding);
+
+            if (!rect.contains(pos))
+                continue;
+
+            QString text =
+                QString("%1\n"
+                        "State: %2\n"
+                        "Start: %3 ms\n"
+                        "End: %4 ms\n"
+                        "Duration: %5 us")
+                    .arg(rowInfo.label)
+                    .arg(channelStateName(segment.state))
+                    .arg(segment.startNs / 1e6, 0, 'f', 3)
+                    .arg(segment.endNs / 1e6, 0, 'f', 3)
+                    .arg((segment.endNs - segment.startNs) / 1e3, 0, 'f', 1);
+
+            if (segment.activeCount > 1)
+            {
+                text += QString("\nConcurrent PPDU: %1").arg(segment.activeCount);
+            }
+
+            m_overlay->setText(text);
             m_overlay->showAt(mapToGlobal(pos) + QPoint(12, 12));
             return true;
         }
     }
 
-    for (const auto &segment : segments)
-    {
-        const uint64_t drawStartNs = std::max(segment.startNs, visibleStartNs);
-        const uint64_t drawEndNs = std::min(segment.endNs, visibleEndNs);
-        if (drawStartNs >= drawEndNs)
-            continue;
+    return false;
+}
 
-        const int row = rowMap.value(segment.rowKey, -1);
-        if (row < 0)
+bool PpduTimelineView::showPhyStateHover(const QPoint &pos)
+{
+    ensurePhyStateCache();
+    if (m_cachedPhyStateRows.isEmpty() || m_phyStateStartNs >= m_phyStateEndNs)
+        return false;
+
+    const int rowCount = m_cachedPhyStateRows.size();
+    const int availH = height() - m_topMargin - kBottomMargin;
+    const int rowH = std::clamp(availH / std::max(1, rowCount), 22, 84);
+    int topY = m_topMargin;
+    if (availH > rowCount * rowH)
+        topY += (availH - rowCount * rowH) / 2;
+
+    const uint64_t visibleStartNs = std::max<uint64_t>(0, m_viewStartNs);
+    const uint64_t visibleEndNs =
+        visibleStartNs + std::max<int>(1, width()) / m_nsToPixel;
+
+    for (int row = 0; row < m_cachedPhyStateRows.size(); ++row)
+    {
+        const QRect labelRect(0, topY + row * rowH, m_leftMargin - 10, rowH);
+        if (labelRect.contains(pos))
+        {
+            m_overlay->setText(m_cachedPhyStateRows[row].label);
+            m_overlay->showAt(mapToGlobal(pos) + QPoint(12, 12));
+            return true;
+        }
+    }
+
+    const int hoveredRow = (pos.y() - topY) / rowH;
+    if (hoveredRow < 0 || hoveredRow >= m_cachedPhyStateRows.size())
+        return false;
+
+    const auto &indices = m_cachedPhyStateRows[hoveredRow].itemIndices;
+    if (indices.isEmpty())
+        return false;
+
+    const auto firstIt =
+        std::lower_bound(indices.cbegin(), indices.cend(), visibleStartNs,
+                         [this](int itemIndex, uint64_t value) {
+                             return m_phyStateItems[itemIndex].phyStateStartNs < value;
+                         });
+    auto hoverIt = firstIt;
+    if (hoverIt != indices.cbegin())
+        --hoverIt;
+
+    for (auto it = hoverIt; it != indices.cend(); ++it)
+    {
+        const auto &segment = m_phyStateItems[*it];
+        if (segment.phyStateStartNs > visibleEndNs)
+            break;
+
+        const uint64_t drawStartNs = std::max(segment.phyStateStartNs, visibleStartNs);
+        const uint64_t drawEndNs = std::min(segment.phyStateEndNs, visibleEndNs);
+        if (drawStartNs >= drawEndNs)
             continue;
 
         const QRectF rect(
             m_leftMargin + (drawStartNs - visibleStartNs) * m_nsToPixel,
-            topY + row * rowH + kLanePadding,
+            topY + hoveredRow * rowH + kLanePadding,
             std::max(1.0, (drawEndNs - drawStartNs) * m_nsToPixel),
             rowH - 2 * kLanePadding);
 
@@ -2563,18 +3119,20 @@ bool PpduTimelineView::showPhyStateHover(const QPoint &pos)
             continue;
 
         const QString text =
-            QString("Node: %1\n"
-                    "Link: CH %2\n"
-                    "State: %3\n"
-                    "Start: %4 ms\n"
-                    "End: %5 ms\n"
-                    "Duration: %6 us")
-                .arg(segment.nodeId)
-                .arg(segment.channel)
-                .arg(phyStateName(segment.state))
-                .arg(segment.startNs / 1e6, 0, 'f', 3)
-                .arg(segment.endNs / 1e6, 0, 'f', 3)
-                .arg((segment.endNs - segment.startNs) / 1e3, 0, 'f', 1);
+	            QString("Node: %1\n"
+	                    "Link: %2\n"
+	                    "Channel: %3\n"
+	                    "State: %4\n"
+	                    "Start: %5 ms\n"
+	                    "End: %6 ms\n"
+	                    "Duration: %7 us")
+		                .arg(nodeRoleLabel(segment.nodeId))
+		                .arg(segment.linkId)
+		                .arg(segment.channel_number)
+		                .arg(phyStateName(toPhyStateKind(segment.phyState)))
+		                .arg(segment.phyStateStartNs / 1e6, 0, 'f', 3)
+		                .arg(segment.phyStateEndNs / 1e6, 0, 'f', 3)
+	                .arg((segment.phyStateEndNs - segment.phyStateStartNs) / 1e3, 0, 'f', 1);
 
         m_overlay->setText(text);
         m_overlay->showAt(mapToGlobal(pos) + QPoint(12, 12));
@@ -2593,8 +3151,13 @@ void PpduTimelineView::resetPage()
     m_seenPpduKeys.clear();
     m_cachedPpduLayout.clear();
     m_cachedPpduRows.clear();
+    m_cachedPhyStateRows.clear();
     m_ppduLayoutDirty = true;
+    m_phyStateCacheDirty = true;
+    m_phyStateStartNs = 0;
+    m_phyStateEndNs = 0;
     m_dataUpdateQueued = false;
+    m_phyStateUpdateQueued = false;
 
     /* ===== view state ===== */
     m_viewStartNs = 0;

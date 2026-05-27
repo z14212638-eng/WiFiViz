@@ -99,6 +99,7 @@ set(PROJECT_SOURCES
     timeline_window.cpp
     timeline_window.h
     visualizer_mode.h
+    chart_filter.h
 )
 
 # Resource files

@@ -34,8 +34,6 @@ PhyStatePieChartWidget::appendPpdu(const PpduVisualItem& ppdu)
 
     const int key = static_cast<int>(ppdu.phyState);
     m_durationNsByState[key] += ppdu.phyStateDurationNs;
-    m_seenPhyKeys.insert((static_cast<quint64>(ppdu.nodeId) << 32) |
-                         static_cast<quint64>(ppdu.channel_number));
     m_totalDurationNs += ppdu.phyStateDurationNs;
     update();
 }
@@ -44,7 +42,6 @@ void
 PhyStatePieChartWidget::reset()
 {
     m_durationNsByState.clear();
-    m_seenPhyKeys.clear();
     m_totalDurationNs = 0;
     m_hoverIndex = -1;
     update();
@@ -116,12 +113,6 @@ PhyStatePieChartWidget::stateColor(PhyStateKind state) const
     }
 }
 
-int
-PhyStatePieChartWidget::observedPhyCount() const
-{
-    return std::max(1, static_cast<int>(m_seenPhyKeys.size()));
-}
-
 void
 PhyStatePieChartWidget::paintEvent(QPaintEvent*)
 {
@@ -150,7 +141,7 @@ PhyStatePieChartWidget::paintEvent(QPaintEvent*)
     p.setPen(kTextMuted);
     p.drawText(card.adjusted(16, 36, -16, -12),
                Qt::AlignLeft | Qt::AlignTop,
-               "PHY-layer state duration distribution across observed radios.");
+               "PHY-layer state duration totals across selected radios.");
 
     if (m_totalDurationNs == 0)
     {
@@ -190,19 +181,17 @@ PhyStatePieChartWidget::paintEvent(QPaintEvent*)
     p.setBrush(Qt::white);
     p.drawEllipse(innerRect);
 
-    const double avgPerPhyMs = double(m_totalDurationNs) /
-                               double(observedPhyCount()) /
-                               1000000.0;
+    const double totalMs = double(m_totalDurationNs) / 1000000.0;
     p.setPen(kTextMuted);
     p.setFont(bodyFont);
-    p.drawText(innerRect.adjusted(0, -16, 0, 0), Qt::AlignCenter, "Avg/PHY");
+    p.drawText(innerRect.adjusted(0, -16, 0, 0), Qt::AlignCenter, "Total");
     p.setPen(kTextPrimary);
     QFont totalFont = titleFont;
     totalFont.setPointSize(totalFont.pointSize() + 2);
     p.setFont(totalFont);
     p.drawText(innerRect.adjusted(0, 16, 0, 0),
                Qt::AlignCenter,
-               QString("%1 ms").arg(avgPerPhyMs, 0, 'f', avgPerPhyMs < 10.0 ? 2 : 1));
+               QString("%1 ms").arg(totalMs, 0, 'f', totalMs < 10.0 ? 2 : 1));
 
     p.setFont(bodyFont);
     int y = legendRect.top();
@@ -282,7 +271,6 @@ PhyStatePieChartWidget::mouseMoveEvent(QMouseEvent* event)
         const auto& slice = data[m_hoverIndex];
         const double ratio = double(slice.durationNs) / double(m_totalDurationNs) * 100.0;
         const double totalDurationMs = double(slice.durationNs) / 1000000.0;
-        const double avgDurationMs = totalDurationMs / double(observedPhyCount());
         QToolTip::showText(mapToGlobal(event->pos() + QPoint(12, -10)),
                            QString(
                                "<div style='min-width:190px;'>"
@@ -290,12 +278,10 @@ PhyStatePieChartWidget::mouseMoveEvent(QMouseEvent* event)
                                "<div style='margin-top:8px;font-size:15px;font-weight:600;'>%1</div>"
                                "<table cellspacing='0' cellpadding='0' style='margin-top:8px;color:#314154;'>"
                                "<tr><td style='padding:0 12px 4px 0;color:#6A7A8C;'>Total</td><td style='font-weight:600;'>%2 ms</td></tr>"
-                               "<tr><td style='padding:0 12px 4px 0;color:#6A7A8C;'>Avg/PHY</td><td style='font-weight:600;'>%3 ms</td></tr>"
-                               "<tr><td style='padding:0 12px 0 0;color:#6A7A8C;'>Share</td><td style='font-weight:600;'>%4%</td></tr>"
+                               "<tr><td style='padding:0 12px 0 0;color:#6A7A8C;'>Share</td><td style='font-weight:600;'>%3%</td></tr>"
                                "</table></div>")
                                .arg(slice.label)
                                .arg(totalDurationMs, 0, 'f', totalDurationMs < 10.0 ? 2 : 1)
-                               .arg(avgDurationMs, 0, 'f', avgDurationMs < 10.0 ? 2 : 1)
                                .arg(ratio, 0, 'f', 1),
                            this);
     }

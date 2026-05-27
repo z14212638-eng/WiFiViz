@@ -9,6 +9,7 @@
 #include "rx_outcome_chart.h"
 #include "throughput_chart.h"
 
+#include <QComboBox>
 #include <QDialog>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -90,6 +91,25 @@ Timeline_Display::Timeline_Display(QWidget *parent)
     m_latencyTitle->setStyleSheet("font-size: 18px; font-weight: 700; color: #243447;");
     latencyHeaderLayout->addWidget(m_latencyTitle, 1);
 
+    auto *filterStyle =
+        "QComboBox {"
+        "background: #F5F8FC;"
+        "border: 1px solid #D5DDE8;"
+        "border-radius: 6px;"
+        "padding: 0 8px;"
+        "min-height: 30px;"
+        "color: #344255;"
+        "font-weight: 600;"
+        "}";
+    m_nodeFilterCombo = new QComboBox(latencyFrame);
+    m_nodeFilterCombo->setToolTip("Filter charts by node");
+    m_nodeFilterCombo->addItem("All Nodes", -1);
+    m_nodeFilterCombo->setStyleSheet(filterStyle);
+    m_linkFilterCombo = new QComboBox(latencyFrame);
+    m_linkFilterCombo->setToolTip("Filter charts by link");
+    m_linkFilterCombo->addItem("All Links", -1);
+    m_linkFilterCombo->setStyleSheet(filterStyle);
+
     auto *metricsFrame = new QFrame(ui->frame_2);
     metricsFrame->setFrameShape(QFrame::StyledPanel);
     metricsFrame->setFrameShadow(QFrame::Raised);
@@ -104,6 +124,14 @@ Timeline_Display::Timeline_Display(QWidget *parent)
     m_metricsTitle = new QLabel("Frame Mix", metricsFrame);
     m_metricsTitle->setStyleSheet("font-size: 18px; font-weight: 700; color: #243447;");
     headerLayout->addWidget(m_metricsTitle, 1);
+    m_metricsNodeFilterCombo = new QComboBox(metricsFrame);
+    m_metricsNodeFilterCombo->setToolTip("Filter charts by node");
+    m_metricsNodeFilterCombo->addItem("All Nodes", -1);
+    m_metricsNodeFilterCombo->setStyleSheet(filterStyle);
+    m_metricsLinkFilterCombo = new QComboBox(metricsFrame);
+    m_metricsLinkFilterCombo->setToolTip("Filter charts by link");
+    m_metricsLinkFilterCombo->addItem("All Links", -1);
+    m_metricsLinkFilterCombo->setStyleSheet(filterStyle);
 
     auto makePageButton = [&](const QString& text) {
         auto *button = new QPushButton(text, metricsFrame);
@@ -144,6 +172,8 @@ Timeline_Display::Timeline_Display(QWidget *parent)
         "}");
     auto *latencyPrevButton = makePageButton("‹");
     auto *latencyNextButton = makePageButton("›");
+    latencyHeaderLayout->addWidget(m_nodeFilterCombo);
+    latencyHeaderLayout->addWidget(m_linkFilterCombo);
     latencyHeaderLayout->addWidget(m_latencyCdfButton);
     latencyHeaderLayout->addWidget(latencyPrevButton);
     latencyHeaderLayout->addWidget(latencyNextButton);
@@ -172,10 +202,24 @@ Timeline_Display::Timeline_Display(QWidget *parent)
     connect(m_latencyCdfButton, &QPushButton::clicked, this, [this](bool checked) {
         setLatencyCdfMode(checked);
     });
+    connect(m_nodeFilterCombo, &QComboBox::currentIndexChanged, this, [this]() {
+        refreshChartFilters();
+    });
+    connect(m_linkFilterCombo, &QComboBox::currentIndexChanged, this, [this]() {
+        refreshChartFilters();
+    });
+    connect(m_metricsNodeFilterCombo, &QComboBox::currentIndexChanged, this, [this]() {
+        refreshChartFilters();
+    });
+    connect(m_metricsLinkFilterCombo, &QComboBox::currentIndexChanged, this, [this]() {
+        refreshChartFilters();
+    });
     setLatencyPage(0);
 
     auto *prevButton = makePageButton("‹");
     auto *nextButton = makePageButton("›");
+    headerLayout->addWidget(m_metricsNodeFilterCombo);
+    headerLayout->addWidget(m_metricsLinkFilterCombo);
     headerLayout->addWidget(prevButton);
     headerLayout->addWidget(nextButton);
     metricsLayout->addLayout(headerLayout);
@@ -244,6 +288,33 @@ void Timeline_Display::resetPage()
         m_mcsDistributionChart->reset();
     if (m_phyStatePieChart)
         m_phyStatePieChart->reset();
+    m_chartItems.clear();
+    m_chartFilter = ChartFilter{};
+    m_nodeRoles.clear();
+    if (m_nodeFilterCombo)
+    {
+        QSignalBlocker blocker(m_nodeFilterCombo);
+        m_nodeFilterCombo->clear();
+        m_nodeFilterCombo->addItem("All Nodes", -1);
+    }
+    if (m_linkFilterCombo)
+    {
+        QSignalBlocker blocker(m_linkFilterCombo);
+        m_linkFilterCombo->clear();
+        m_linkFilterCombo->addItem("All Links", -1);
+    }
+    if (m_metricsNodeFilterCombo)
+    {
+        QSignalBlocker blocker(m_metricsNodeFilterCombo);
+        m_metricsNodeFilterCombo->clear();
+        m_metricsNodeFilterCombo->addItem("All Nodes", -1);
+    }
+    if (m_metricsLinkFilterCombo)
+    {
+        QSignalBlocker blocker(m_metricsLinkFilterCombo);
+        m_metricsLinkFilterCombo->clear();
+        m_metricsLinkFilterCombo->addItem("All Links", -1);
+    }
     setLatencyPage(0);
     setMetricsPage(0);
 
@@ -274,6 +345,17 @@ void Timeline_Display::appendOutput(const QString &text)
 
 void Timeline_Display::appendPpdu(const PpduVisualItem &ppdu)
 {
+    updateFilterOptions(ppdu);
+    m_chartItems.append(ppdu);
+    if (ppdu.recordType == RecordType::DeviceRole || m_chartFilter.accepts(ppdu))
+    {
+        appendToCharts(ppdu);
+    }
+}
+
+void
+Timeline_Display::appendToCharts(const PpduVisualItem& ppdu)
+{
     if (m_throughputChart)
         m_throughputChart->appendPpdu(ppdu);
     if (m_queueingDelayChart)
@@ -290,6 +372,127 @@ void Timeline_Display::appendPpdu(const PpduVisualItem &ppdu)
         m_mcsDistributionChart->appendPpdu(ppdu);
     if (m_phyStatePieChart)
         m_phyStatePieChart->appendPpdu(ppdu);
+}
+
+void
+Timeline_Display::updateFilterOptions(const PpduVisualItem& ppdu)
+{
+    auto ensureComboValue = [](QComboBox* combo, int value, const QString& label) {
+        if (!combo || value < 0)
+            return;
+        const int existingIndex = combo->findData(value);
+        if (existingIndex >= 0)
+        {
+            if (combo->itemText(existingIndex) != label)
+            {
+                QSignalBlocker blocker(combo);
+                combo->setItemText(existingIndex, label);
+            }
+            return;
+        }
+        QSignalBlocker blocker(combo);
+        combo->addItem(label, value);
+    };
+
+    auto nodeLabel = [this](const PpduVisualItem& item) {
+        DeviceRole role = item.deviceRole;
+        const auto roleIt = m_nodeRoles.find(static_cast<int>(item.nodeId));
+        if (role == DeviceRole::Unknown && roleIt != m_nodeRoles.end())
+            role = roleIt.value();
+        if (role != DeviceRole::Unknown)
+            m_nodeRoles[static_cast<int>(item.nodeId)] = role;
+        return QString("%1 %2")
+            .arg(role == DeviceRole::Ap ? "AP"
+                    : role == DeviceRole::Sta ? "STA"
+                                               : "Node")
+            .arg(item.nodeId);
+    };
+
+    if (ppdu.recordType == RecordType::DeviceRole ||
+        ppdu.recordType == RecordType::Ppdu ||
+        ppdu.recordType == RecordType::PpduUpdate ||
+        ppdu.recordType == RecordType::MacDelay ||
+        ppdu.recordType == RecordType::PhyState)
+    {
+        if (ppdu.recordType == RecordType::DeviceRole)
+        {
+            m_nodeRoles[static_cast<int>(ppdu.nodeId)] = ppdu.deviceRole;
+        }
+        ensureComboValue(m_nodeFilterCombo,
+                         static_cast<int>(ppdu.nodeId),
+                         nodeLabel(ppdu));
+        ensureComboValue(m_metricsNodeFilterCombo,
+                         static_cast<int>(ppdu.nodeId),
+                         nodeLabel(ppdu));
+        ensureComboValue(m_linkFilterCombo,
+                         static_cast<int>(ppdu.linkId),
+                         QString("Link %1").arg(ppdu.linkId));
+        ensureComboValue(m_metricsLinkFilterCombo,
+                         static_cast<int>(ppdu.linkId),
+                         QString("Link %1").arg(ppdu.linkId));
+    }
+}
+
+void
+Timeline_Display::refreshChartFilters()
+{
+    QComboBox* sender = qobject_cast<QComboBox*>(QObject::sender());
+    const bool fromMetricsNode = sender == m_metricsNodeFilterCombo;
+    const bool fromMetricsLink = sender == m_metricsLinkFilterCombo;
+    const int nodeId = fromMetricsNode && m_metricsNodeFilterCombo
+                           ? m_metricsNodeFilterCombo->currentData().toInt()
+                           : (m_nodeFilterCombo ? m_nodeFilterCombo->currentData().toInt() : -1);
+    const int linkId = fromMetricsLink && m_metricsLinkFilterCombo
+                           ? m_metricsLinkFilterCombo->currentData().toInt()
+                           : (m_linkFilterCombo ? m_linkFilterCombo->currentData().toInt() : -1);
+
+    auto setComboByValue = [](QComboBox* combo, int value) {
+        if (!combo)
+            return;
+        const int index = combo->findData(value);
+        if (index < 0 || combo->currentIndex() == index)
+            return;
+        QSignalBlocker blocker(combo);
+        combo->setCurrentIndex(index);
+    };
+
+    setComboByValue(m_nodeFilterCombo, nodeId);
+    setComboByValue(m_metricsNodeFilterCombo, nodeId);
+    setComboByValue(m_linkFilterCombo, linkId);
+    setComboByValue(m_metricsLinkFilterCombo, linkId);
+
+    m_chartFilter.nodeId = nodeId;
+    m_chartFilter.linkId = linkId;
+    replayCharts();
+}
+
+void
+Timeline_Display::replayCharts()
+{
+    if (m_throughputChart)
+        m_throughputChart->reset();
+    if (m_queueingDelayChart)
+        m_queueingDelayChart->reset();
+    if (m_macE2eDelayChart)
+        m_macE2eDelayChart->reset();
+    if (m_compositionChart)
+        m_compositionChart->reset();
+    if (m_nodeThroughputChart)
+        m_nodeThroughputChart->reset();
+    if (m_rxOutcomeChart)
+        m_rxOutcomeChart->reset();
+    if (m_mcsDistributionChart)
+        m_mcsDistributionChart->reset();
+    if (m_phyStatePieChart)
+        m_phyStatePieChart->reset();
+
+    for (const auto& item : m_chartItems)
+    {
+        if (item.recordType == RecordType::DeviceRole || m_chartFilter.accepts(item))
+        {
+            appendToCharts(item);
+        }
+    }
 }
 
 void Timeline_Display::showSniffFail()

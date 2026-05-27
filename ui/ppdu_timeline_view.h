@@ -30,6 +30,8 @@ enum class TimelineRowMode
 enum class TimelineViewMode
 {
     PpduTimeline,
+    MloChannelTimeline,
+    MloChannelState,
     ChannelState,
     PhyStateTimeline
 };
@@ -61,6 +63,16 @@ struct CachedPpduRow
     QString label;
     QVector<int> itemIndices;
     int laneCount = 1;
+};
+
+struct CachedPhyStateRow
+{
+    uint64_t rowKey = 0;
+    QString label;
+    uint16_t nodeId = 0;
+    uint8_t linkId = 0;
+    uint8_t channel = 0;
+    QVector<int> itemIndices;
 };
 
 struct DeviceNodeInfo
@@ -116,8 +128,10 @@ private:
     int effectiveRowHeight() const;
     int timelineTopY() const;
     void paintPpduTimeline(QPainter &painter);
+    void paintMloChannelStateView(QPainter &painter);
     void paintChannelStateView(QPainter &painter);
     void paintPhyStateTimeline(QPainter &painter);
+    bool showMloChannelStateHover(const QPoint &pos);
     bool showChannelStateHover(const QPoint &pos);
     bool showPhyStateHover(const QPoint &pos);
     void updateModeButton();
@@ -126,13 +140,19 @@ private:
     int64_t clampViewStartNs(double requestedStartNs, double nsToPixel) const;
     void syncRangeSliderToView();
     void scheduleDataUpdate();
+    void schedulePhyStateDataUpdate();
     void rebuildPpduLayoutCache();
     void ensurePpduLayoutCache() const;
     void markPpduLayoutDirty();
+    void rebuildPhyStateCache();
+    void ensurePhyStateCache() const;
+    void markPhyStateCacheDirty();
     void updateDetailWindow(int idx);
     QString roleLabel(uint64_t mac) const;
     QString roleTooltip(uint64_t mac) const;
     DeviceRole deviceRole(uint64_t mac) const;
+    DeviceRole deviceRoleForNode(uint16_t nodeId) const;
+    QString nodeRoleLabel(uint16_t nodeId) const;
     uint16_t nodeIdForMac(uint64_t mac) const;
     QColor senderColor(uint64_t mac) const;
 
@@ -147,7 +167,12 @@ private:
     mutable QVector<CachedPpduLayoutItem> m_cachedPpduLayout;
     mutable QVector<CachedPpduRow> m_cachedPpduRows;
     mutable bool m_ppduLayoutDirty = true;
+    mutable QVector<CachedPhyStateRow> m_cachedPhyStateRows;
+    mutable uint64_t m_phyStateStartNs = 0;
+    mutable uint64_t m_phyStateEndNs = 0;
+    mutable bool m_phyStateCacheDirty = true;
     bool m_dataUpdateQueued = false;
+    bool m_phyStateUpdateQueued = false;
 
     /* view */
     int64_t m_viewStartNs = 0;

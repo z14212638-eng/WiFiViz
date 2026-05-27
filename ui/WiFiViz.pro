@@ -69,6 +69,7 @@ HEADERS += \
     timeline_display.h \
     timeline_window.h \
     visualizer_mode.h \
+    chart_filter.h \
     visualizer_config.h\
     utils.h\
     indus_widget.h\

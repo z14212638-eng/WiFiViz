@@ -136,7 +136,7 @@ struct PPDU_Meta
     uint8_t device_role;
     uint8_t device_mac[6];
     uint8_t delay_kind;
-    uint8_t reserved[1];
+    uint8_t link_id;
 };
 
 /**
@@ -338,7 +338,10 @@ class SniffUtils : public Object
      * @param[in] ppdu
      * @param[in] tx_vector
      */
-    void Sniff_ppdu_begin(uint16_t nodeId, Ptr<const WifiPpdu> ppdu, const WifiTxVector& tx_vector);
+    void Sniff_ppdu_begin(uint16_t nodeId,
+                          uint8_t linkId,
+                          Ptr<const WifiPpdu> ppdu,
+                          const WifiTxVector& tx_vector);
 
     void NotifyMacEnqueue(uint16_t nodeId, uint32_t deviceId, Ptr<const WifiMpdu> mpdu);
 
@@ -349,10 +352,11 @@ class SniffUtils : public Object
      * 
      */
     void NotifyStateChange(uint16_t nodeId,
-                           uint8_t channelId,
-                           Time start,
-                           Time duration,
-                           WifiPhyState state);
+                            uint8_t channelId,
+                            uint8_t linkId,
+                            Time start,
+                            Time duration,
+                            WifiPhyState state);
     /**
      * @brief set the simulation time
      *
@@ -373,7 +377,8 @@ class SniffUtils : public Object
     std::unordered_map<uint64_t, ppdu_id_t> m_packet_uid_to_ppdu_id;
     std::unordered_map<uint64_t, ppdu_id_t> m_seq_key_to_ppdu_id;
     std::unordered_map<uint64_t, sim_time_ns_t> m_mpdu_enqueue_time_ns;
-    std::unordered_map<uint16_t, uint8_t> m_node_channel_id;
+    std::unordered_map<uint64_t, uint8_t> m_node_link_channel_id;
+    std::unordered_map<uint16_t, uint8_t> m_node_roles;
     RingBuffer* m_ring = nullptr;
     std::unordered_set<uint32_t> m_registeredNodeIds;
     std::unordered_set<uint64_t> m_registeredMacs;

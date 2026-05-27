@@ -133,6 +133,12 @@ MacAddressToUint64(const Mac48Address& address)
 }
 
 uint64_t
+NodeLinkKey(uint16_t nodeId, uint8_t linkId)
+{
+    return (static_cast<uint64_t>(nodeId) << 8) | linkId;
+}
+
+uint64_t
 PacketUid(const Ptr<const Packet>& packet)
 {
     return packet ? packet->GetUid() : 0;
@@ -193,6 +199,7 @@ EmitDeviceRoleRecord(RingBuffer* ring, const Ptr<WifiNetDevice>& device)
     meta.record_type = SHM_RECORD_DEVICE_ROLE;
     meta.sta_id = static_cast<uint16_t>(device->GetNode()->GetId());
     meta.channel_id = device->GetPhy() ? device->GetPhy()->GetChannelNumber() : 0;
+    meta.link_id = 0;
     meta.device_role = DetectDeviceRole(device);
 
     const Mac48Address address = Mac48Address::ConvertFrom(device->GetMac()->GetAddress());
@@ -204,6 +211,8 @@ void
 EmitMacDelayRecord(RingBuffer* ring,
                    uint16_t nodeId,
                    uint8_t channelId,
+                   uint8_t linkId,
+                   uint8_t deviceRole,
                    const WifiMacHeader& header,
                    uint32_t sizeBytes,
                    sim_time_ns_t eventTimeNs,
@@ -219,6 +228,8 @@ EmitMacDelayRecord(RingBuffer* ring,
     meta.record_type = SHM_RECORD_MAC_DELAY;
     meta.sta_id = nodeId;
     meta.channel_id = channelId;
+    meta.link_id = linkId;
+    meta.device_role = deviceRole;
     meta.frame_type = static_cast<uint8_t>(header.GetType());
     meta.size_bytes = sizeBytes;
     meta.tx_end_ns = eventTimeNs;
@@ -319,17 +330,17 @@ SniffUtils::SniffUtils()
 
 SniffUtils::~SniffUtils()
 {
-    std::cout << "[THR-SUMMARY] finalize=" << g_finalizeCount
-              << " finalize_success=" << g_finalizeSuccessCount
-              << " finalize_thr_nonzero=" << g_finalizeNonZeroThroughputCount
-              << " begin=" << g_beginCount
-              << " begin_thr_nonzero=" << g_beginNonZeroThroughputCount
-              << " rx_outcome=" << g_rxOutcomeCount
-              << " rx_outcome_success=" << g_rxOutcomeSuccessCount
-              << " rx_outcome_map_miss=" << g_rxOutcomeMapMissCount
-              << " rx_outcome_ptr_hit=" << g_rxOutcomePtrHitCount
-              << " rx_outcome_uid_hit=" << g_rxOutcomeUidHitCount
-              << " window_bytes=" << g_throughputBytesInWindow << std::endl;
+    // std::cout << "[THR-SUMMARY] finalize=" << g_finalizeCount
+    //           << " finalize_success=" << g_finalizeSuccessCount
+    //           << " finalize_thr_nonzero=" << g_finalizeNonZeroThroughputCount
+    //           << " begin=" << g_beginCount
+    //           << " begin_thr_nonzero=" << g_beginNonZeroThroughputCount
+    //           << " rx_outcome=" << g_rxOutcomeCount
+    //           << " rx_outcome_success=" << g_rxOutcomeSuccessCount
+    //           << " rx_outcome_map_miss=" << g_rxOutcomeMapMissCount
+    //           << " rx_outcome_ptr_hit=" << g_rxOutcomePtrHitCount
+    //           << " rx_outcome_uid_hit=" << g_rxOutcomeUidHitCount
+    //           << " window_bytes=" << g_throughputBytesInWindow << std::endl;
 }
 
 bool
@@ -360,7 +371,8 @@ SniffUtils::Initialize(const NetDeviceContainer& devices, double simulationTime)
     m_packet_uid_to_ppdu_id.clear();
     m_seq_key_to_ppdu_id.clear();
     m_mpdu_enqueue_time_ns.clear();
-    m_node_channel_id.clear();
+    m_node_link_channel_id.clear();
+    m_node_roles.clear();
     m_registeredNodeIds.clear();
     m_registeredMacs.clear();
 
@@ -375,16 +387,20 @@ SniffUtils::Initialize(const NetDeviceContainer& devices, double simulationTime)
         const auto nodeId = static_cast<uint16_t>(wifiDevice->GetNode()->GetId());
         const Mac48Address address = Mac48Address::ConvertFrom(wifiDevice->GetMac()->GetAddress());
         const uint64_t macKey = MacAddressToUint64(address);
+        const uint8_t deviceRole = DetectDeviceRole(wifiDevice);
+        if (deviceRole != SHM_DEVICE_UNKNOWN)
+        {
+            m_node_roles[nodeId] = deviceRole;
+        }
 
         if (m_registeredNodeIds.insert(nodeId).second || m_registeredMacs.insert(macKey).second)
         {
             EmitDeviceRoleRecord(m_ring, wifiDevice);
         }
 
-        Ptr<WifiPhy> phy = wifiDevice->GetPhy();
-        const auto channelId = phy->GetChannelNumber();
-        m_node_channel_id[nodeId] = channelId;
         const auto deviceId = static_cast<uint32_t>(wifiDevice->GetIfIndex());
+        const uint8_t nPhys = wifiDevice->GetNPhys();
+        const uint8_t phyCount = nPhys > 0 ? nPhys : 1;
 
         if (wifiDevice->GetMac()->GetQosSupported())
         {
@@ -415,33 +431,53 @@ SniffUtils::Initialize(const NetDeviceContainer& devices, double simulationTime)
             "AckedMpdu",
             MakeCallback(&SniffUtils::NotifyAckedMpdu, this).Bind(nodeId, deviceId));
 
-        phy->TraceConnectWithoutContext("SignalTransmission",
-                                        MakeCallback(&SniffUtils::Sniff_ppdu_begin, this, nodeId));
+        for (uint8_t phyId = 0; phyId < phyCount; ++phyId)
+        {
+            Ptr<WifiPhy> phy = wifiDevice->GetPhy(phyId);
+            if (!phy)
+            {
+                continue;
+            }
 
-        phy->TraceConnectWithoutContext("MonitorSnifferRx",
-                                        MakeCallback(&SniffUtils::Sniff_rx_packet_begin, this));
+            uint8_t linkId = phyId;
+            if (const auto maybeLinkId = wifiDevice->GetMac()->GetLinkForPhy(phyId))
+            {
+                linkId = *maybeLinkId;
+            }
 
-        phy->TraceConnectWithoutContext("PhyTxEnd",
-                                        MakeCallback(&SniffUtils::Sniff_tx_packet_end, this));
+            const auto channelId = phy->GetChannelNumber();
+            m_node_link_channel_id[NodeLinkKey(nodeId, linkId)] = channelId;
 
-        phy->TraceConnectWithoutContext("MonitorSnifferTx",
-                                        MakeCallback(&SniffUtils::Sniff_tx_packet_begin, this));
+            phy->TraceConnectWithoutContext(
+                "SignalTransmission",
+                MakeCallback(&SniffUtils::Sniff_ppdu_begin, this, nodeId, linkId));
 
-        phy->TraceConnectWithoutContext("PhyTxDrop",
-                                        MakeCallback(&SniffUtils::Sniff_drop_packet_phy, this));
+            phy->TraceConnectWithoutContext("MonitorSnifferRx",
+                                            MakeCallback(&SniffUtils::Sniff_rx_packet_begin, this));
 
-        phy->TraceConnectWithoutContext("PhyRxPpduDrop",
-                                        MakeCallback(&SniffUtils::Sniff_drop_ppdu_phy, this));
+            phy->TraceConnectWithoutContext("PhyTxEnd",
+                                            MakeCallback(&SniffUtils::Sniff_tx_packet_end, this));
 
-        auto state_helper = phy->GetState();
-        state_helper->TraceConnectWithoutContext("State",
-                                                 MakeCallback(&SniffUtils::NotifyStateChange,
-                                                              this,
-                                                              nodeId,
-                                                              channelId));
-        state_helper->TraceConnectWithoutContext("RxOutcome",
-                                                 MakeCallback(&SniffUtils::Sniff_rx_ppdu_outcome,
-                                                              this));
+            phy->TraceConnectWithoutContext("MonitorSnifferTx",
+                                            MakeCallback(&SniffUtils::Sniff_tx_packet_begin, this));
+
+            phy->TraceConnectWithoutContext("PhyTxDrop",
+                                            MakeCallback(&SniffUtils::Sniff_drop_packet_phy, this));
+
+            phy->TraceConnectWithoutContext("PhyRxPpduDrop",
+                                            MakeCallback(&SniffUtils::Sniff_drop_ppdu_phy, this));
+
+            auto state_helper = phy->GetState();
+            state_helper->TraceConnectWithoutContext("State",
+                                                     MakeCallback(&SniffUtils::NotifyStateChange,
+                                                                  this,
+                                                                  nodeId,
+                                                                  channelId,
+                                                                  linkId));
+            state_helper->TraceConnectWithoutContext("RxOutcome",
+                                                     MakeCallback(&SniffUtils::Sniff_rx_ppdu_outcome,
+                                                                  this));
+        }
     }
 
     m_initialized = true;
@@ -516,10 +552,19 @@ SniffUtils::NotifyAckedMpdu(uint16_t nodeId, uint32_t deviceId, Ptr<const WifiMp
             }
         }
 
-        const auto channelIt = m_node_channel_id.find(nodeId);
+        uint8_t linkId = 0;
+        if (!mpdu->GetInFlightLinkIds().empty())
+        {
+            linkId = *mpdu->GetInFlightLinkIds().begin();
+        }
+
+        const auto channelIt = m_node_link_channel_id.find(NodeLinkKey(nodeId, linkId));
+        const auto roleIt = m_node_roles.find(nodeId);
         EmitMacDelayRecord(m_ring,
                            nodeId,
-                           channelIt != m_node_channel_id.end() ? channelIt->second : 0,
+                           channelIt != m_node_link_channel_id.end() ? channelIt->second : 0,
+                           linkId,
+                           roleIt != m_node_roles.end() ? roleIt->second : SHM_DEVICE_UNKNOWN,
                            mpdu->GetHeader(),
                            mpdu->GetSize(),
                            ackTimeNs,
@@ -739,10 +784,10 @@ SniffUtils::Sniff_rx_ppdu_outcome(Ptr<const WifiPpdu> ppdu,
     if (g_rxOutcomeDebugPrintCount < 120)
     {
         const auto trueCount = std::count(outcomes.begin(), outcomes.end(), true);
-        std::cout << "[THR-RXOUTCOME] id=" << id << " uid=" << ppdu->GetUid()
-                  << " outcomes=" << outcomes.size()
-                  << " true_count=" << trueCount
-                  << " has_success=" << (hasSuccessfulMpdu ? 1 : 0) << std::endl;
+        // std::cout << "[THR-RXOUTCOME] id=" << id << " uid=" << ppdu->GetUid()
+        //           << " outcomes=" << outcomes.size()
+        //           << " true_count=" << trueCount
+        //           << " has_success=" << (hasSuccessfulMpdu ? 1 : 0) << std::endl;
         g_rxOutcomeDebugPrintCount++;
     }
     if (!hasSuccessfulMpdu)
@@ -834,6 +879,7 @@ SniffUtils::Sniff_tx_all_packets(Ptr<const Packet> packet,
 
 void
 SniffUtils::Sniff_ppdu_begin(uint16_t nodeId,
+                             uint8_t linkId,
                              Ptr<const WifiPpdu> ppdu,
                              const WifiTxVector& tx_vector)
 {
@@ -864,9 +910,12 @@ SniffUtils::Sniff_ppdu_begin(uint16_t nodeId,
     /*Channel ID*/
     uint8_t channels = GetPpduPrimaryChannel(ppdu);
     meta.channel_id = channels;
+    meta.link_id = linkId;
 
     /* 确定 STA ID */
     meta.sta_id = nodeId;
+    const auto roleIt = m_node_roles.find(nodeId);
+    meta.device_role = roleIt != m_node_roles.end() ? roleIt->second : SHM_DEVICE_UNKNOWN;
 
     /*Frame_Type*/
     meta.frame_type = static_cast<uint8_t>(psdu_sample->GetHeader(0).GetType());
@@ -908,6 +957,8 @@ SniffUtils::Sniff_ppdu_begin(uint16_t nodeId,
             EmitMacDelayRecord(m_ring,
                                nodeId,
                                meta.channel_id,
+                               linkId,
+                               meta.device_role,
                                psdu_sample->GetHeader(0),
                                meta.size_bytes,
                                meta.tx_start_ns,
@@ -961,6 +1012,7 @@ SniffUtils::Sniff_ppdu_begin(uint16_t nodeId,
 void
 SniffUtils::NotifyStateChange(uint16_t nodeId,
                               uint8_t channelId,
+                              uint8_t linkId,
                               Time start,
                               Time duration,
                               WifiPhyState state)
@@ -974,6 +1026,9 @@ SniffUtils::NotifyStateChange(uint16_t nodeId,
     meta.record_type = SHM_RECORD_PHY_STATE;
     meta.sta_id = nodeId;
     meta.channel_id = channelId;
+    meta.link_id = linkId;
+    const auto roleIt = m_node_roles.find(nodeId);
+    meta.device_role = roleIt != m_node_roles.end() ? roleIt->second : SHM_DEVICE_UNKNOWN;
     meta.phy_state = ToSharedPhyState(state);
     meta.phy_state_start_ns = start.GetNanoSeconds();
     meta.phy_state_duration_ns = duration.GetNanoSeconds();

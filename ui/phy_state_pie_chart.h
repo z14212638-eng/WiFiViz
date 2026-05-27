@@ -2,7 +2,6 @@
 
 #include <QColor>
 #include <QHash>
-#include <QSet>
 #include <QVector>
 #include <QWidget>
 
@@ -35,10 +34,8 @@ class PhyStatePieChartWidget : public QWidget
     int sliceIndexAt(const QPoint& pos) const;
     QString stateName(PhyStateKind state) const;
     QColor stateColor(PhyStateKind state) const;
-    int observedPhyCount() const;
 
     QHash<int, uint64_t> m_durationNsByState;
-    QSet<quint64> m_seenPhyKeys;
     uint64_t m_totalDurationNs = 0;
     int m_hoverIndex = -1;
 };

@@ -3,12 +3,222 @@
 #include "visualizer_mode.h"
 #include "visualizer_config.h"
 #include <QApplication>
+#include <QByteArray>
+#include <QGuiApplication>
 #include <QProcess>
 #include <QFile>
+#include <QtGlobal>
+
+#include <algorithm>
+#include <array>
+#include <cstdio>
 #include <cstdlib>
+#include <optional>
+#include <regex>
+#include <sstream>
+#include <string>
 
 namespace
 {
+constexpr int kDesignWidth = 2560;
+constexpr int kDesignHeight = 1440;
+
+struct ScreenSize
+{
+    int width = 0;
+    int height = 0;
+};
+
+std::optional<std::string>
+RunCommand(const char* command)
+{
+    std::array<char, 256> buffer{};
+    std::string output;
+
+    FILE* pipe = popen(command, "r");
+    if (!pipe)
+    {
+        return std::nullopt;
+    }
+
+    while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr)
+    {
+        output += buffer.data();
+    }
+
+    const int status = pclose(pipe);
+    if (status != 0 || output.empty())
+    {
+        return std::nullopt;
+    }
+    return output;
+}
+
+std::optional<ScreenSize>
+BestActiveMonitorFromXrandr()
+{
+    const auto output = RunCommand("xrandr --listactivemonitors 2>/dev/null");
+    if (!output)
+    {
+        return std::nullopt;
+    }
+
+    const std::regex geometry(R"(\b([1-9][0-9]*)/[0-9]+x([1-9][0-9]*)/[0-9]+\+[0-9]+\+[0-9]+\b)");
+    std::optional<ScreenSize> best;
+    std::istringstream lines(*output);
+    std::string line;
+
+    while (std::getline(lines, line))
+    {
+        std::smatch match;
+        if (!std::regex_search(line, match, geometry))
+        {
+            continue;
+        }
+
+        ScreenSize size{std::stoi(match[1].str()), std::stoi(match[2].str())};
+        if (line.find('*') != std::string::npos)
+        {
+            return size;
+        }
+
+        if (!best || (size.width * size.height) > (best->width * best->height))
+        {
+            best = size;
+        }
+    }
+
+    return best;
+}
+
+std::optional<ScreenSize>
+BestConnectedScreenFromXrandr()
+{
+    const auto output = RunCommand("xrandr --current 2>/dev/null");
+    if (!output)
+    {
+        return std::nullopt;
+    }
+
+    const std::regex geometry(R"(\b([1-9][0-9]*)x([1-9][0-9]*)[+-][0-9]+[+-][0-9]+\b)");
+    std::optional<ScreenSize> best;
+    std::istringstream lines(*output);
+    std::string line;
+
+    while (std::getline(lines, line))
+    {
+        if (line.find(" connected") == std::string::npos)
+        {
+            continue;
+        }
+
+        std::smatch match;
+        if (!std::regex_search(line, match, geometry))
+        {
+            continue;
+        }
+
+        ScreenSize size{std::stoi(match[1].str()), std::stoi(match[2].str())};
+        if (line.find(" primary ") != std::string::npos)
+        {
+            return size;
+        }
+
+        if (!best || (size.width * size.height) > (best->width * best->height))
+        {
+            best = size;
+        }
+    }
+
+    return best;
+}
+
+std::optional<ScreenSize>
+ScreenSizeFromXdpyinfo()
+{
+    const auto output = RunCommand("xdpyinfo 2>/dev/null");
+    if (!output)
+    {
+        return std::nullopt;
+    }
+
+    const std::regex dimensions(R"(dimensions:\s+([1-9][0-9]*)x([1-9][0-9]*)\s+pixels)");
+    std::smatch match;
+    if (!std::regex_search(*output, match, dimensions))
+    {
+        return std::nullopt;
+    }
+
+    return ScreenSize{std::stoi(match[1].str()), std::stoi(match[2].str())};
+}
+
+std::optional<double>
+ScaleFromEnvironment()
+{
+    const char* value = std::getenv("WIFIVIZ_UI_SCALE");
+    if (!value)
+    {
+        return std::nullopt;
+    }
+
+    char* end = nullptr;
+    const double scale = std::strtod(value, &end);
+    if (end == value || scale <= 0.0)
+    {
+        return std::nullopt;
+    }
+    return scale;
+}
+
+void
+ApplyDesignScale()
+{
+    if (const char* disabled = std::getenv("WIFIVIZ_DISABLE_AUTO_SCALE"))
+    {
+        const std::string value(disabled);
+        if (value == "1" || value == "true" || value == "TRUE")
+        {
+            return;
+        }
+    }
+
+    if (!ScaleFromEnvironment() && std::getenv("QT_SCALE_FACTOR"))
+    {
+        return;
+    }
+
+    std::optional<double> scale = ScaleFromEnvironment();
+    if (!scale)
+    {
+        std::optional<ScreenSize> screen = BestActiveMonitorFromXrandr();
+        if (!screen)
+        {
+            screen = BestConnectedScreenFromXrandr();
+        }
+        if (!screen)
+        {
+            screen = ScreenSizeFromXdpyinfo();
+        }
+
+        if (!screen)
+        {
+            return;
+        }
+
+        scale = std::min(static_cast<double>(screen->width) / kDesignWidth,
+                         static_cast<double>(screen->height) / kDesignHeight);
+    }
+
+    if (*scale <= 0.0)
+    {
+        return;
+    }
+
+    qputenv("QT_ENABLE_HIGHDPI_SCALING", QByteArray("1"));
+    qputenv("QT_AUTO_SCREEN_SCALE_FACTOR", QByteArray("0"));
+    qputenv("QT_SCALE_FACTOR", QByteArray::number(*scale, 'f', 4));
+}
+
 void
 ApplySamplingConfig(const QStringList& args)
 {
@@ -83,9 +293,18 @@ ApplySamplingConfig(const QStringList& args)
 
 int main(int argc, char *argv[])
 {
+    ApplyDesignScale();
+
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+    QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
+        Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
+#endif
+
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     // 开启高 DPI 自适应
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
+#endif
 
     QApplication a(argc, argv);
 

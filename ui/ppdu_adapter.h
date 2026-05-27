@@ -140,6 +140,7 @@ public:
         v.id = m.id;
         v.nodeId = m.sta_id;
         v.channel_number = m.channel_id;
+        v.linkId = m.link_id;
         v.rxState = static_cast<RxState>(m.rx_state);
         v.failReason = m.rx_fail_reason;
         v.collision = (m.collision != 0);
