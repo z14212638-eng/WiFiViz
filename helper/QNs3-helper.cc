@@ -536,13 +536,8 @@ QNs3Helper::ConfigureVisualizerSampling(bool precise, uint32_t rough)
 bool
 QNs3Helper::LaunchTimelineViewerAsync()
 {
-    const int ret = std::system(
-        "if [ -x build/WiFiVizApp ]; then "
-        "nohup build/WiFiVizApp --timeline-only >/dev/null 2>&1 & "
-        "exit 0; "
-        "else "
-        "exit 1; "
-        "fi");
+    const int ret =
+        std::system("sh contrib/wifiviz/tools/wifiviz-hidden.sh build/WiFiVizApp --timeline-only");
     return ret == 0;
 }
 

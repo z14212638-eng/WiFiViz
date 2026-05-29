@@ -204,6 +204,21 @@ static inline QColor rxStateAccent(RxState state)
     }
 }
 
+static inline QColor rxStateFill(RxState state)
+{
+    switch (state)
+    {
+    case RxState::Success:
+        return QColor(46, 139, 87, 220);
+    case RxState::Collision:
+        return QColor(219, 68, 55, 225);
+    case RxState::DecodeFail:
+        return QColor(199, 146, 47, 225);
+    default:
+        return QColor(92, 109, 126, 165);
+    }
+}
+
 static inline QString phyStateBadgeName(PhyStateKind state)
 {
     switch (state)
@@ -848,6 +863,8 @@ void PpduTimelineView::setDetailWindow(PpduDetailWindow *detailWindow)
 // ★ NEW
 uint64_t PpduTimelineView::rowKey(const PpduVisualItem &ppdu) const
 {
+	    if (m_rowMode == TimelineRowMode::ByReceiver)
+	        return ppdu.receiver;
 	    if (m_rowMode == TimelineRowMode::ByChannel)
 	        return static_cast<uint64_t>(ppdu.channel_number);
 	    if (m_rowMode == TimelineRowMode::ByNodeLink)
@@ -1032,7 +1049,11 @@ void PpduTimelineView::onToggleChannelView()
 	        m_viewMode = TimelineViewMode::ChannelState;
 	        m_rowMode = TimelineRowMode::ByChannel;
 	        break;
-	    case TimelineViewMode::ChannelState:
+    case TimelineViewMode::ChannelState:
+	        m_viewMode = TimelineViewMode::RxTimeline;
+        m_rowMode = TimelineRowMode::ByReceiver;
+        break;
+    case TimelineViewMode::RxTimeline:
 	        m_viewMode = TimelineViewMode::PhyStateTimeline;
         m_rowMode = TimelineRowMode::ByNodeLink;
         break;
@@ -1068,6 +1089,10 @@ void PpduTimelineView::updateModeButton()
 	        m_btnChannel->setToolTip("Switch to aggregate channel state view");
 	        break;
     case TimelineViewMode::ChannelState:
+        m_btnChannel->setText("RX");
+        m_btnChannel->setToolTip("Switch to RX result timeline");
+        break;
+    case TimelineViewMode::RxTimeline:
         m_btnChannel->setText("PHY");
         m_btnChannel->setToolTip("Switch to PHY state view");
         break;
@@ -1266,6 +1291,10 @@ void PpduTimelineView::rebuildPpduLayoutCache()
 	            {
 	                row.label = QString("MLO Link");
 	            }
+	        }
+	        else if (m_rowMode == TimelineRowMode::ByReceiver)
+	        {
+	            row.label = QString("RX %1").arg(roleLabel(row.rowKey));
 	        }
 	        else
 	        {
@@ -1637,6 +1666,12 @@ void PpduTimelineView::paintEvent(QPaintEvent *)
         return;
     }
 
+    if (m_viewMode == TimelineViewMode::RxTimeline)
+    {
+        paintRxTimeline(painter);
+        return;
+    }
+
     paintPpduTimeline(painter);
 }
 
@@ -1867,6 +1902,168 @@ void PpduTimelineView::paintPpduTimeline(QPainter &painter)
             QRectF(rightX - kRangeHandleW / 2, barY,
                    kRangeHandleW, kRangeBarHeight),
             3, 3);
+    }
+}
+
+void PpduTimelineView::paintRxTimeline(QPainter &painter)
+{
+    ensurePpduLayoutCache();
+
+    const int rowCount = m_cachedPpduRows.size();
+    if (rowCount == 0)
+        return;
+
+    const int availH = height() - m_topMargin - kBottomMargin;
+    const int rowH = std::clamp(availH / rowCount, 18, 80);
+    int topY = m_topMargin;
+    if (availH > rowCount * rowH)
+        topY += (availH - rowCount * rowH) / 2;
+
+    painter.setPen(QColor(90, 90, 90));
+    painter.drawText(m_leftMargin, 16, "RX Timeline");
+
+    if (m_hoverIndex >= 0 && m_hoverIndex < m_cachedPpduLayout.size())
+    {
+        const int row = m_cachedPpduLayout[m_hoverIndex].row;
+        if (row >= 0)
+        {
+            painter.fillRect(QRectF(0, topY + row * rowH, width(), rowH),
+                             QColor(255, 235, 205, 120));
+        }
+    }
+
+    painter.setPen(kGridLine);
+    for (int r = 0; r <= rowCount; ++r)
+    {
+        const int y = topY + r * rowH;
+        painter.drawLine(m_leftMargin, y, width(), y);
+    }
+
+    for (int rowIndex = 0; rowIndex < m_cachedPpduRows.size(); ++rowIndex)
+    {
+        const auto& rowInfo = m_cachedPpduRows[rowIndex];
+        const int y = topY + rowIndex * rowH + rowH / 2;
+        const QRect labelRect(0, topY + rowIndex * rowH, m_leftMargin - 10, rowH);
+
+        painter.setBrush(senderColor(rowInfo.rowKey));
+        painter.setPen(Qt::NoPen);
+        painter.drawEllipse(QRectF(12, y - 5, 10, 10));
+
+        painter.setPen(QColor(25, 32, 40));
+        painter.drawText(labelRect.adjusted(28, 0, -4, 0),
+                         Qt::AlignVCenter | Qt::AlignLeft,
+                         rowInfo.label);
+
+        if (labelRect.contains(m_mousePos))
+        {
+            QToolTip::showText(mapToGlobal(QPoint(8, y)),
+                               roleTooltip(rowInfo.rowKey),
+                               this);
+        }
+    }
+
+    painter.setPen(QColor(180, 180, 180));
+    painter.drawLine(m_leftMargin - 8, topY, m_leftMargin - 8, topY + rowCount * rowH);
+
+    for (int rowIndex = 0; rowIndex < m_cachedPpduRows.size(); ++rowIndex)
+    {
+        const auto& rowInfo = m_cachedPpduRows[rowIndex];
+        const int laneCount = std::max(1, rowInfo.laneCount);
+        const double laneH = (rowH - 2) / double(laneCount);
+
+        for (int idx : rowInfo.itemIndices)
+        {
+            const auto& ppdu = m_ppduItems[idx];
+            const auto& layout = m_cachedPpduLayout[idx];
+            const QRectF rect(
+                m_leftMargin + (ppdu.txStartNs - m_viewStartNs) * m_nsToPixel,
+                topY + rowIndex * rowH + layout.lane * laneH + kLanePadding,
+                std::max(1.0, (ppdu.txEndNs - ppdu.txStartNs) * m_nsToPixel),
+                laneH - 2 * kLanePadding);
+
+            QColor fill = rxStateFill(ppdu.rxState);
+            if (idx == m_hoverIndex)
+                fill = fill.lighter(120);
+
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(fill);
+            painter.drawRoundedRect(rect, 3, 3);
+
+            painter.setPen(QPen(idx == m_selectedIndex ? QColor(20, 20, 20)
+                                                       : QColor(60, 60, 60),
+                                idx == m_selectedIndex ? 2 : 1));
+            painter.setBrush(Qt::NoBrush);
+            painter.drawRoundedRect(rect, 3, 3);
+
+            if (rect.width() >= 74)
+            {
+                painter.setPen(ppdu.rxState == RxState::Unknown ? QColor(35, 42, 50) : Qt::white);
+                painter.drawText(rect.adjusted(6, 0, -6, 0),
+                                 Qt::AlignVCenter | Qt::AlignLeft,
+                                 rxStateName(ppdu.rxState));
+            }
+        }
+    }
+
+    const QPen gridPen(QColor(180, 180, 180), 1, Qt::DashLine);
+    painter.setPen(gridPen);
+    const uint64_t visibleStartNs = std::max<uint64_t>(0, m_viewStartNs);
+    const uint64_t visibleEndNs =
+        visibleStartNs + std::max<int>(1, width()) / m_nsToPixel;
+    for (int i = 0; i <= 10; ++i)
+    {
+        const uint64_t ns = visibleStartNs + i * (visibleEndNs - visibleStartNs) / 10;
+        const int x = m_leftMargin + (ns - visibleStartNs) * m_nsToPixel;
+        painter.drawLine(x, topY, x, topY + rowCount * rowH);
+        painter.drawText(x - 20,
+                         topY + rowCount * rowH + 15,
+                         QString::number(ns / 1e6, 'f', 2) + " ms");
+    }
+
+    if (m_selecting)
+    {
+        const int left = std::clamp(std::min(m_selectStart.x(), m_selectEnd.x()),
+                                    m_leftMargin,
+                                    width() - 5);
+        const int right = std::clamp(std::max(m_selectStart.x(), m_selectEnd.x()),
+                                     m_leftMargin,
+                                     width() - 5);
+        if (right > left)
+        {
+            painter.setPen(QPen(kSelectBorder, 1, Qt::DashLine));
+            painter.setBrush(kSelectFill);
+            painter.drawRect(QRectF(left, topY, right - left, rowCount * rowH));
+        }
+    }
+
+    const int barY = height() - kRangeBarHeight - kRangeBarBottomPadding;
+    const int barX = m_leftMargin;
+    const int barW = width() - m_leftMargin - kRangeBarMargin;
+    if (barW > 50)
+    {
+        const int leftX = barX + m_rangeStart * barW;
+        const int rightX = barX + m_rangeEnd * barW;
+
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(180, 185, 190));
+        painter.drawRoundedRect(QRectF(barX, barY + kRangeBarHeight / 2 - 2, barW, 4), 2, 2);
+
+        painter.setBrush(QColor(90, 140, 255, 120));
+        painter.drawRoundedRect(QRectF(leftX, barY, rightX - leftX, kRangeBarHeight), 4, 4);
+
+        painter.setBrush(QColor(240, 240, 240));
+        painter.drawRoundedRect(QRectF(leftX - kRangeHandleW / 2,
+                                       barY,
+                                       kRangeHandleW,
+                                       kRangeBarHeight),
+                                3,
+                                3);
+        painter.drawRoundedRect(QRectF(rightX - kRangeHandleW / 2,
+                                       barY,
+                                       kRangeHandleW,
+                                       kRangeBarHeight),
+                                3,
+                                3);
     }
 }
 
@@ -2588,7 +2785,8 @@ void PpduTimelineView::mousePressEvent(QMouseEvent *e)
     if (e->button() == Qt::LeftButton)
     {
 	        m_pressedIndex = (m_viewMode == TimelineViewMode::PpduTimeline ||
-	                          m_viewMode == TimelineViewMode::MloChannelTimeline)
+	                          m_viewMode == TimelineViewMode::MloChannelTimeline ||
+	                          m_viewMode == TimelineViewMode::RxTimeline)
 	                             ? hitTest(e->pos())
 	                             : -1;
         m_pressMoved = false;
@@ -2719,7 +2917,8 @@ void PpduTimelineView::mouseReleaseEvent(QMouseEvent *e)
         setCursor(Qt::ArrowCursor);
 	        if (!m_pressMoved && m_pressedIndex >= 0 &&
 	            (m_viewMode == TimelineViewMode::PpduTimeline ||
-	             m_viewMode == TimelineViewMode::MloChannelTimeline))
+	             m_viewMode == TimelineViewMode::MloChannelTimeline ||
+	             m_viewMode == TimelineViewMode::RxTimeline))
         {
             m_selectedIndex = m_pressedIndex;
             updateDetailWindow(m_selectedIndex);
@@ -2759,7 +2958,8 @@ void PpduTimelineView::mouseReleaseEvent(QMouseEvent *e)
         if (endNs > startNs)
         {
 	            if (m_viewMode == TimelineViewMode::PpduTimeline ||
-	                m_viewMode == TimelineViewMode::MloChannelTimeline)
+	                m_viewMode == TimelineViewMode::MloChannelTimeline ||
+	                m_viewMode == TimelineViewMode::RxTimeline)
             {
                 auto stats = computeStats(startNs, endNs);
 

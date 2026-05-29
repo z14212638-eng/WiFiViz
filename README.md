@@ -101,8 +101,8 @@ Required third-party libraries and tools:
   `nlohmann/json.hpp`, and the script generator looks for
   `nlohmann_json >= 3.2.0`.
 - POSIX shell tools: `/bin/bash`, `sh`, and `nohup`. The GUI uses `bash -lc`
-  when running ns-3 commands, and script mode uses `nohup` to launch
-  `build/WiFiVizApp --timeline-only` in the background.
+  when running ns-3 commands, and script mode uses `tools/wifiviz-hidden.sh` to
+  launch the timeline viewer in the background.
 - Standard ns-3 build tools such as `git`, `python3`, `pkg-config`, CMake, and
   Ninja or Make.
 

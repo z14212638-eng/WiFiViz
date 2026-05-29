@@ -23,6 +23,7 @@ class QPainter;
 enum class TimelineRowMode
 {
     BySender,
+    ByReceiver,
     ByChannel,
     ByNodeLink
 };
@@ -33,6 +34,7 @@ enum class TimelineViewMode
     MloChannelTimeline,
     MloChannelState,
     ChannelState,
+    RxTimeline,
     PhyStateTimeline
 };
 
@@ -128,6 +130,7 @@ private:
     int effectiveRowHeight() const;
     int timelineTopY() const;
     void paintPpduTimeline(QPainter &painter);
+    void paintRxTimeline(QPainter &painter);
     void paintMloChannelStateView(QPainter &painter);
     void paintChannelStateView(QPainter &painter);
     void paintPhyStateTimeline(QPainter &painter);
