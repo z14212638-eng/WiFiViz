@@ -9,7 +9,7 @@ Qt frontend for creating scenarios, generating scratch scripts, running
 simulations, and inspecting PHY/MAC behavior through shared-memory trace
 records.
 
-The source code lives in ``contrib/WiFiViz`` when installed in an |ns3|
+The source code lives in ``contrib/wifiviz`` when installed in an |ns3|
 source tree. User scripts should include ``ns3/wifiviz.h`` and use the
 ``WiFiVizHelper`` alias.
 
@@ -25,7 +25,7 @@ The module focuses on Wi-Fi visualization workflows:
   frame-composition visualization.
 
 The module does not modify |ns3| core files. Full GUI mode uses an optional
-scratch launcher copied from ``contrib/WiFiViz/tools/visualizer.cc`` to
+scratch launcher copied from ``contrib/wifiviz/tools/visualizer.cc`` to
 ``scratch/visualizer.cc``. The current automated regression tests are minimal;
 visual and workflow validation should be repeated before each release.
 
@@ -36,7 +36,7 @@ Install the module as:
 
 .. code-block:: text
 
-   /path/to/ns-3.46/contrib/WiFiViz
+   /path/to/ns-3.46/contrib/wifiviz
 
 Configure and build |ns3| from the |ns3| root:
 
@@ -50,7 +50,7 @@ standard |ns3| scratch target mechanism:
 
 .. code-block:: bash
 
-   cp contrib/WiFiViz/tools/visualizer.cc scratch/visualizer.cc
+   cp contrib/wifiviz/tools/visualizer.cc scratch/visualizer.cc
    ./ns3 run visualizer
 
 For one-command mode, a user script can expose a command-line flag and call the

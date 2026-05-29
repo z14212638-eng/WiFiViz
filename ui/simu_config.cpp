@@ -706,10 +706,10 @@ bool Simu_Config::prepareSceneScript(QString &outSceneFileName) {
         m_ns3Path + "/scratch/" + m_selectedScene + ".cc";
     if (!QFile::exists(scratchPath)) {
       const QString simplePath =
-          m_ns3Path + "/contrib/WiFiViz/Simulation/Default/Simple/" +
+          m_ns3Path + "/contrib/wifiviz/Simulation/Default/Simple/" +
           m_selectedScene + "/" + m_selectedScene + ".cc";
       const QString complexPath =
-          m_ns3Path + "/contrib/WiFiViz/Simulation/Default/Complex/" +
+          m_ns3Path + "/contrib/wifiviz/Simulation/Default/Complex/" +
           m_selectedScene + "/" + m_selectedScene + ".cc";
 
       QString sourcePath;
@@ -1068,7 +1068,7 @@ QString Simu_Config::resolveUtilsBuildScriptPath() const {
   // QDir dir(QCoreApplication::applicationDirPath());
   QDir dir(m_ns3Path);
   for (int i = 0; i < 5; ++i) {
-    const QString candidate = dir.absoluteFilePath("contrib/WiFiViz/ui/utils/build.sh");
+    const QString candidate = dir.absoluteFilePath("contrib/wifiviz/ui/utils/build.sh");
     if (QFileInfo::exists(candidate)) {
       return candidate;
     }

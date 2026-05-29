@@ -141,9 +141,9 @@ QString Page1_model_chose::currentSceneBaseDir() const
         return "";
 
     if (page->findChild<QListWidget *>("listWidget"))
-        return ns3Path + "/contrib/WiFiViz/Simulation/Default/Simple";
+        return ns3Path + "/contrib/wifiviz/Simulation/Default/Simple";
     if (page->findChild<QListWidget *>("listWidget_2"))
-        return ns3Path + "/contrib/WiFiViz/Simulation/Default/Complex";
+        return ns3Path + "/contrib/wifiviz/Simulation/Default/Complex";
     if (page->findChild<QListWidget *>("listWidget_3"))
         return ns3Path + "/scratch";
 
@@ -163,7 +163,7 @@ void Page1_model_chose::refreshModelLists()
     if (ns3Path.isEmpty())
         return;
 
-    QDir simpleDir(ns3Path + "/contrib/WiFiViz/Simulation/Default/Simple");
+    QDir simpleDir(ns3Path + "/contrib/wifiviz/Simulation/Default/Simple");
     if (simpleDir.exists() && ui->listWidget)
     {
         QStringList dirs = simpleDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot,
@@ -174,7 +174,7 @@ void Page1_model_chose::refreshModelLists()
             ui->listWidget->setCurrentRow(0);
     }
 
-    QDir complexDir(ns3Path + "/contrib/WiFiViz/Simulation/Default/Complex");
+    QDir complexDir(ns3Path + "/contrib/wifiviz/Simulation/Default/Complex");
     if (complexDir.exists())
     {
         if (auto *lw2 = findChild<QListWidget *>("listWidget_2"))

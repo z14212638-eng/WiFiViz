@@ -341,7 +341,7 @@ MainWindow::MainWindow(VisualizerMode mode, QWidget *parent)
 #ifdef NS3_SOURCE_DIR
   {
     const QString defaultNs3Path = QString(NS3_SOURCE_DIR);
-    jsonhelper.Base_dir = defaultNs3Path + "/contrib/WiFiViz/Simulation/Designed/";
+    jsonhelper.Base_dir = defaultNs3Path + "/contrib/wifiviz/Simulation/Designed/";
     if (simuConfig)
       simuConfig->setNs3Path(defaultNs3Path);
     if (page1) {
@@ -467,7 +467,7 @@ void MainWindow::onBrowseNs3Dir() {
     this->page1->ns3Path = dir;
     this->page1->refreshModelLists();
     //fix: update simuConfig ns3Path
-    jsonhelper.Base_dir = dir + "/contrib/WiFiViz/Simulation/Designed/";
+    jsonhelper.Base_dir = dir + "/contrib/wifiviz/Simulation/Designed/";
     if (simuConfig)
       simuConfig->setNs3Path(dir);
     greetingPage->setNs3Path(dir);

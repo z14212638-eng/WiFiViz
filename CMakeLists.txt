@@ -15,7 +15,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF) 
 
 build_lib(
-    LIBNAME WiFiViz
+    LIBNAME wifiviz
     SOURCE_FILES model/QNs3.cc
                  model/SniffUtils.cc
                  helper/QNs3-helper.cc

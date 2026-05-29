@@ -23,7 +23,7 @@ else()
     message(STATUS "nlohmann_json not found, using header-only version")
     add_executable(wifiviz-script-generator wifiviz-script-generator.cc)
     target_include_directories(wifiviz-script-generator PRIVATE
-        ${NS3_ROOT}/contrib/WiFiViz/model
+        ${NS3_ROOT}/contrib/wifiviz/model
         /usr/include
         /usr/local/include
     )

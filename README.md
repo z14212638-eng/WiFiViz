@@ -5,11 +5,11 @@ Wi-Fi simulations through a Qt-based graphical workflow. It combines scenario
 configuration, JSON persistence, script generation, ns-3 execution, shared-memory
 trace collection, and interactive PHY/MAC visualization in one tool.
 
-This repository is the standalone `WiFiViz` contrib module. A clone or
-release archive unpacks directly to the module directory expected under an
-existing ns-3 source tree.
+This repository is the standalone `wifiviz` contrib module. The tool name is
+`ns3-WiFiViz`, and the Qt application remains `WiFiVizApp`, but the module
+directory and CMake module name are lowercase `wifiviz`.
 
-![Project overview](img/visualization-dashboard.png)
+![Project overview](doc/figures/visualization-dashboard.png)
 
 ## Table of Contents
 
@@ -32,7 +32,7 @@ existing ns-3 source tree.
 After cloning this repository, the important paths are:
 
 ```text
-WiFiViz/
+wifiviz/
 ├── CMakeLists.txt
 ├── README.md
 ├── doc/
@@ -46,7 +46,7 @@ WiFiViz/
 └── Simulation/
 ```
 
-Install the repository itself as `/path/to/ns-3.46/contrib/WiFiViz`.
+Install the repository itself as `/path/to/ns-3.46/contrib/wifiviz`.
 The optional full-GUI launcher is stored inside the module at
 `tools/visualizer.cc` and can be copied into ns-3 `scratch/`.
 
@@ -66,12 +66,12 @@ The optional full-GUI launcher is stored inside the module at
   throughput, RX outcome, MCS distribution, PHY-state pie chart, delay CDF
   view, and simulation output viewer.
 
-![Full GUI workflow](img/simulation-config-overview.png)
+![Full GUI workflow](doc/figures/simulation-config-overview.png)
 
 ## Requirements
 
 WiFiViz is developed and tested as an ns-3.46 contrib module on Linux. The
-repository must be installed as `contrib/WiFiViz` inside an ns-3 source tree;
+repository must be installed as `contrib/wifiviz` inside an ns-3 source tree;
 some GUI paths and helper launch commands intentionally use that module path.
 
 Required build environment:
@@ -101,8 +101,8 @@ Required third-party libraries and tools:
   `nlohmann/json.hpp`, and the script generator looks for
   `nlohmann_json >= 3.2.0`.
 - POSIX shell tools: `/bin/bash`, `sh`, and `nohup`. The GUI uses `bash -lc`
-  when running ns-3 commands, and script mode uses `tools/wifiviz-hidden.sh` to
-  launch the timeline viewer in the background.
+  when running ns-3 commands, and script mode uses `nohup` to launch
+  `build/WiFiVizApp --timeline-only` in the background.
 - Standard ns-3 build tools such as `git`, `python3`, `pkg-config`, CMake, and
   Ninja or Make.
 
@@ -138,18 +138,18 @@ Notes:
 ## Installation
 
 Clone this repository directly into the ns-3 `contrib/` directory. The clone
-name should be `WiFiViz` so ns-3 sees the expected module path:
+name must be `wifiviz` so ns-3 sees the expected module path:
 
 ```bash
 cd /path/to/ns-3.46/contrib
-git clone <repo-url> WiFiViz
+git clone <repo-url> wifiviz
 ```
 
 Copy the full-GUI launcher from the module into ns-3 `scratch/`:
 
 ```bash
 cd /path/to/ns-3.46
-cp contrib/WiFiViz/tools/visualizer.cc scratch/visualizer.cc
+cp contrib/wifiviz/tools/visualizer.cc scratch/visualizer.cc
 ```
 
 This extra copy step is intentional. `./ns3 run visualizer` works because ns-3
@@ -164,7 +164,7 @@ launcher.
 The final paths must be:
 
 ```text
-/path/to/ns-3.46/contrib/WiFiViz
+/path/to/ns-3.46/contrib/wifiviz
 /path/to/ns-3.46/scratch/visualizer.cc
 ```
 
@@ -325,7 +325,7 @@ Copy the launcher into ns-3 `scratch/`:
 
 ```bash
 cd /path/to/ns-3.46
-cp contrib/WiFiViz/tools/visualizer.cc scratch/visualizer.cc
+cp contrib/wifiviz/tools/visualizer.cc scratch/visualizer.cc
 ```
 
 Start the GUI through ns-3:
@@ -366,7 +366,7 @@ This section describes every major UI page and panel.
 
 ### 1. Welcome and NS-3 Path Page
 
-![Welcome and path page](img/welcome-ns3-path.png)
+![Welcome and path page](doc/figures/welcome-ns3-path.png)
 
 The welcome page asks for the ns-3 root directory. The selected directory is
 validated before the user can enter the simulation workflow. The toolbar also
@@ -380,14 +380,14 @@ Use this page to:
 
 ### 2. Scenario Library Page
 
-![Scenario library](img/scene-library.png)
+![Scenario library](doc/figures/scene-library.png)
 
 The scenario page provides three entry points:
 
 - `Simple`: built-in simple examples under
-  `contrib/WiFiViz/Simulation/Default/Simple`.
+  `contrib/wifiviz/Simulation/Default/Simple`.
 - `Complex`: built-in complex examples under
-  `contrib/WiFiViz/Simulation/Default/Complex`.
+  `contrib/wifiviz/Simulation/Default/Complex`.
 - `Scratch`: readable `*.cc` files under ns-3 `scratch/`.
 
 The page shows a preview image and Markdown description when a default scene
@@ -397,7 +397,7 @@ configuration dashboard. `Load from file` loads a saved project JSON.
 
 ### 3. Simulation Configuration Dashboard
 
-![Simulation configuration overview](img/simulation-config-overview.png)
+![Simulation configuration overview](doc/figures/simulation-config-overview.png)
 
 The configuration dashboard is the central page for creating a new scenario.
 It contains global building settings, AP/STA creation controls, node tables, an
@@ -417,7 +417,7 @@ Use this page to:
 
 ### 4. Building and Layout Controls
 
-![Building configuration](img/building-config.png)
+![Building configuration](doc/figures/building-config.png)
 
 Building controls define the physical simulation environment:
 
@@ -426,7 +426,7 @@ Building controls define the physical simulation environment:
 - exterior wall type,
 - simulation time.
 
-![Interactive layout map](img/layout-map.png)
+![Interactive layout map](doc/figures/layout-map.png)
 
 The layout map renders AP and STA positions inside the configured building
 boundary. Nodes can be moved interactively. The enlarged map view supports
@@ -434,7 +434,7 @@ zooming, panning, and synchronized node repositioning.
 
 ### 5. AP Configuration Page
 
-![AP configuration](img/ap-config.png)
+![AP configuration](doc/figures/ap-config.png)
 
 The AP page configures access-point-specific parameters. It includes:
 
@@ -456,7 +456,7 @@ simulation dashboard after the AP is accepted.
 
 ### 6. STA Configuration Page
 
-![STA configuration](img/sta-config.png)
+![STA configuration](doc/figures/sta-config.png)
 
 The STA page mirrors the AP page for station nodes and adds station-specific
 association controls:
@@ -471,7 +471,7 @@ aggregation, antenna, and STA-owned traffic flows.
 
 ### 7. EDCA/QoS Dialog
 
-![EDCA configuration](img/edca-config.png)
+![EDCA configuration](doc/figures/edca-config.png)
 
 The EDCA dialog configures per-access-category contention parameters:
 
@@ -485,7 +485,7 @@ These values are applied to AP or STA QoS MAC configuration when QoS is enabled.
 
 ### 8. Antenna Dialog
 
-![Antenna configuration](img/antenna-config.png)
+![Antenna configuration](doc/figures/antenna-config.png)
 
 The antenna dialog configures antenna model information used by the node
 configuration. It supports selecting antenna type and related gain/beamwidth
@@ -493,7 +493,7 @@ parameters where applicable.
 
 ### 9. Node Traffic Sidebar
 
-![Node traffic sidebar](img/node-traffic-panel.png)
+![Node traffic sidebar](doc/figures/node-traffic-panel.png)
 
 The right sidebar contains a node traffic panel while the configuration page is
 active. Right-click or select a node in the map to inspect flows owned by that
@@ -510,7 +510,7 @@ is updated.
 
 ### 10. Flow Configuration Dialog
 
-![Flow dialog](img/flow-dialog.png)
+![Flow dialog](doc/figures/flow-dialog.png)
 
 The flow dialog supports multiple traffic abstractions:
 
@@ -525,7 +525,7 @@ parameterized distributions where the UI exposes them.
 
 ## Visualization Guide
 
-![Visualization dashboard](img/visualization-dashboard.png)
+![Visualization dashboard](doc/figures/visualization-dashboard.png)
 
 The result dashboard receives records from ns-3 through shared memory and
 updates linked views in real time or after simulation completion.
@@ -546,7 +546,7 @@ depending on the selected timeline mode. The view supports:
 
 ### Channel-State Timeline
 
-![Channel-state timeline](img/channel-state-timeline.png)
+![Channel-state timeline](doc/figures/channel-state-timeline.png)
 
 The channel-state view reconstructs channel occupancy from PPDU start/end
 timestamps. It classifies intervals as IDLE, BUSY, or COLLISION. This view is
@@ -554,7 +554,7 @@ useful for quickly locating high-contention periods and idle gaps.
 
 ### PHY-State Timeline
 
-![PHY-state timeline](img/phy-state-timeline.png)
+![PHY-state timeline](doc/figures/phy-state-timeline.png)
 
 The PHY-state view displays radio state transitions such as IDLE, TX, RX,
 CCA_BUSY, SWITCHING, SLEEP, and OFF. It helps explain why frames are delayed,
@@ -562,7 +562,7 @@ blocked, or overlapping with channel access activity.
 
 ### PPDU Detail Sidebar
 
-![PPDU detail sidebar](img/ppdu-detail-sidebar.png)
+![PPDU detail sidebar](doc/figures/ppdu-detail-sidebar.png)
 
 Clicking a PPDU updates the right detail sidebar. The sidebar shows packet
 metadata such as time range, sender, receiver, frame type, MCS, channel, SNR,
@@ -571,7 +571,7 @@ outcome when those fields are available.
 
 ### Throughput Chart
 
-![Throughput chart](img/throughput-chart.png)
+![Throughput chart](doc/figures/throughput-chart.png)
 
 The throughput chart shows temporal throughput samples calculated from
 successfully received PPDU data. Values are rendered in Mbps. The chart also
@@ -579,7 +579,7 @@ draws an average line to show the overall trend of the current run.
 
 ### Delay Charts
 
-![Delay charts](img/delay-charts.png)
+![Delay charts](doc/figures/delay-charts.png)
 
 The delay panel switches between:
 
@@ -599,7 +599,7 @@ Each delay chart also provides `CDF View`:
 
 ### Frame Mix Chart
 
-![Frame mix chart](img/frame-mix-chart.png)
+![Frame mix chart](doc/figures/frame-mix-chart.png)
 
 The frame mix chart summarizes the proportions of data, control, management,
 and other observed frame categories. It is useful for checking protocol
@@ -608,7 +608,7 @@ expected.
 
 ### Node Throughput Chart
 
-![Node throughput chart](img/node-throughput-chart.png)
+![Node throughput chart](doc/figures/node-throughput-chart.png)
 
 The node throughput chart aggregates throughput contribution by AP/STA MAC
 address and displays node-level share. It helps identify unfairness, traffic
@@ -616,7 +616,7 @@ concentration, and asymmetric topology effects.
 
 ### RX Outcome Chart
 
-![RX outcome chart](img/rx-outcome-chart.png)
+![RX outcome chart](doc/figures/rx-outcome-chart.png)
 
 The RX outcome chart groups reception results into successful receptions,
 collision-related failures, and other decoding failures. It should be read
@@ -624,7 +624,7 @@ together with the PPDU and channel-state timelines.
 
 ### MCS Distribution Chart
 
-![MCS distribution chart](img/mcs-distribution-chart.png)
+![MCS distribution chart](doc/figures/mcs-distribution-chart.png)
 
 The MCS distribution chart summarizes modulation and coding scheme usage across
 observed transmissions. It helps diagnose rate adaptation behavior and channel
@@ -632,7 +632,7 @@ quality.
 
 ### PHY State Pie Chart
 
-![PHY state pie chart](img/phy-state-pie-chart.png)
+![PHY state pie chart](doc/figures/phy-state-pie-chart.png)
 
 The PHY state pie chart aggregates the duration share of IDLE, TX, RX,
 CCA_BUSY, SWITCHING, SLEEP, OFF, and UNKNOWN states. The center label reports
@@ -641,7 +641,7 @@ per-PHY average duration, and percentage share.
 
 ### Output Window
 
-![Output window](img/output-window.png)
+![Output window](doc/figures/output-window.png)
 
 The `Output` button opens a read-only industrial-gray output window. It shows
 the `./ns3 build`, `./ns3 run`, generator, stdout, and stderr logs.
@@ -651,7 +651,7 @@ the `./ns3 build`, `./ns3 run`, generator, stdout, and stderr logs.
 Full GUI mode writes project data under:
 
 ```text
-contrib/WiFiViz/Simulation/Designed/Designed_<timestamp>/
+contrib/wifiviz/Simulation/Designed/Designed_<timestamp>/
 ├── GeneralJson/
 │   └── General.json
 ├── ApConfigJson/
@@ -672,7 +672,7 @@ them for later inspection or delete them after the experiment.
 ## Module Layout
 
 ```text
-contrib/WiFiViz/
+contrib/wifiviz/
 ├── CMakeLists.txt
 ├── model/
 │   ├── wifiviz.h              # public aggregate header for user scripts

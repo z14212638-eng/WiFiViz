@@ -55,7 +55,7 @@ if [ -f "$BUILD_DIR/wifiviz-script-generator" ]; then
     echo ""
     echo "示例:"
     echo "  $BUILD_DIR/wifiviz-script-generator \\"
-    echo "    ../ns-3.46/contrib/WiFiViz/Simulation/Designed/MySimulationProject \\"
+    echo "    ../ns-3.46/contrib/wifiviz/Simulation/Designed/MySimulationProject \\"
     echo "    ../ns-3.46/scratch/generated-simulation.cc"
 else
     echo ""

@@ -282,7 +282,7 @@ struct GeneralConfig
     std::vector<double> range;
     double SimulationTime;
     std::string ns3Path;
-    std::string jsonPath = "contrib/WiFiViz/Simulation/Designed/";
+    std::string jsonPath = "contrib/wifiviz/Simulation/Designed/";
     std::string path = ns3Path + jsonPath;
 };
     
