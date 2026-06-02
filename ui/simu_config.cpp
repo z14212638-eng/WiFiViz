@@ -5,6 +5,7 @@
 #include "visualizer_config.h"
 
 #include <QCheckBox>
+#include <QCloseEvent>
 #include <QCoreApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -20,12 +21,36 @@
 #include <QInputDialog>
 #include <QLabel>
 #include <QMessageBox>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QSpinBox>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <boost/interprocess/shared_memory_object.hpp>
+
+namespace {
+class BuildWaitDialog : public QDialog {
+ public:
+  explicit BuildWaitDialog(QWidget *parent = nullptr) : QDialog(parent) {}
+
+  void allowClose() { m_allowClose = true; }
+
+ protected:
+  void closeEvent(QCloseEvent *event) override {
+    if (m_allowClose) {
+      QDialog::closeEvent(event);
+      return;
+    }
+    event->ignore();
+  }
+
+  void reject() override {}
+
+ private:
+  bool m_allowClose = false;
+};
+} // namespace
 
 Simu_Config::Simu_Config(QWidget *parent)
     : QWidget(parent), ui(new Ui::Simu_Config) {
@@ -72,6 +97,7 @@ QFrame#myFrame {
 
 Simu_Config::~Simu_Config() {
   qDebug() << "Destroying Simu_Config";
+  closeBuildWaitDialog();
   stopPpduReader();
 
   if (ns3Process) {
@@ -84,6 +110,58 @@ Simu_Config::~Simu_Config() {
   }
 
   delete ui; // 最后 delete UI
+}
+
+void Simu_Config::showBuildWaitDialog() {
+  if (m_buildWaitDialog) {
+    m_buildWaitDialog->raise();
+    return;
+  }
+
+  auto *dialog = new BuildWaitDialog(this);
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  dialog->setWindowTitle(tr("WiFiViz"));
+  dialog->setWindowModality(Qt::WindowModal);
+  dialog->setModal(true);
+  dialog->setWindowFlag(Qt::WindowCloseButtonHint, false);
+  dialog->setWindowFlag(Qt::WindowContextHelpButtonHint, false);
+
+  auto *layout = new QVBoxLayout(dialog);
+  layout->setContentsMargins(28, 24, 28, 24);
+  layout->setSpacing(14);
+
+  auto *title = new QLabel(tr("Building simulation"), dialog);
+  title->setAlignment(Qt::AlignCenter);
+  title->setStyleSheet("font-size: 18px; font-weight: 700; color: #263442;");
+  layout->addWidget(title);
+
+  auto *detail = new QLabel(tr("Running ./ns3 build\nWaiting for visualization"), dialog);
+  detail->setAlignment(Qt::AlignCenter);
+  detail->setStyleSheet("font-size: 13px; color: #536171;");
+  layout->addWidget(detail);
+
+  auto *progress = new QProgressBar(dialog);
+  progress->setRange(0, 0);
+  progress->setTextVisible(false);
+  progress->setFixedWidth(260);
+  layout->addWidget(progress, 0, Qt::AlignCenter);
+
+  m_buildWaitDialog = dialog;
+  connect(dialog, &QObject::destroyed, this, [this]() {
+    m_buildWaitDialog = nullptr;
+  });
+  dialog->show();
+}
+
+void Simu_Config::closeBuildWaitDialog() {
+  if (!m_buildWaitDialog)
+    return;
+
+  QDialog *dialog = m_buildWaitDialog;
+  m_buildWaitDialog = nullptr;
+  if (auto *buildDialog = dynamic_cast<BuildWaitDialog *>(dialog))
+    buildDialog->allowClose();
+  dialog->close();
 }
 
 void Simu_Config::refreshFlowTargetSources() {
@@ -751,12 +829,14 @@ void Simu_Config::Generate_And_Build() {
 
   if (ns3Process) {
     qWarning() << "Generation/build already running";
+    closeBuildWaitDialog();
     return;
   }
 
   if (m_ns3Path.isEmpty()) {
     qWarning() << "NS-3 path not set";
     emit ns3OutputReady("NS-3 path not set.\n");
+    closeBuildWaitDialog();
     return;
   }
 
@@ -766,6 +846,7 @@ void Simu_Config::Generate_And_Build() {
   QString sceneToRun;
   if (!prepareSceneScript(sceneToRun)) {
     emit ns3OutputReady("Failed to generate simulation script.\n");
+    closeBuildWaitDialog();
     return;
   }
   m_lastGeneratedSceneFileName = sceneToRun;
@@ -805,6 +886,7 @@ void Simu_Config::Generate_And_Build() {
                                              : "CrashExit"));
             ns3Process->deleteLater();
             ns3Process = nullptr;
+            closeBuildWaitDialog();
 
             if (code == 0 && status == QProcess::NormalExit) {
               emit generationReady();
@@ -1218,40 +1300,13 @@ void Simu_Config::on_pushButton_9_clicked() {
       return;
     }
 
-    auto *msgBox = new QMessageBox(QMessageBox::Information, "Attention",
-                                   "Running ./ns3 build\nWaiting for visualization",
-                                   QMessageBox::NoButton, this);
-    msgBox->setAttribute(Qt::WA_DeleteOnClose);
-    msgBox->setWindowModality(Qt::WindowModal);
-
-    // 在窗口真正 show 之后再 move
-    QTimer::singleShot(0, this, [this, msgBox]() {
-      QRect parentRect = this->frameGeometry();
-      QRect boxRect = msgBox->frameGeometry();
-
-      QPoint center = parentRect.center() - boxRect.center();
-
-      msgBox->move(center);
-    });
-    QTimer::singleShot(1200, msgBox, &QMessageBox::close);
-    msgBox->show();
+    showBuildWaitDialog();
     QCoreApplication::processEvents();
   } else {
     QMessageBox msgBox(QMessageBox::Critical, "Error",
                        "At least one AP and one STA is needed", QMessageBox::Ok,
                        this);
-
     msgBox.setWindowModality(Qt::WindowModal);
-
-    QTimer::singleShot(0, this, [this, &msgBox]() {
-      QRect parentRect = this->frameGeometry();
-      QRect boxRect = msgBox.frameGeometry();
-
-      QPoint center = parentRect.center() - boxRect.center();
-
-      msgBox.move(center);
-    });
-
     msgBox.exec();
     return;
   }

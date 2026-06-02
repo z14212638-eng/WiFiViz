@@ -18,6 +18,7 @@
 MainWindow::MainWindow(VisualizerMode mode, QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow), m_mode(mode) {
   ui->setupUi(this);
+  setWindowTitle("WiFiViz");
 
   /*ToolBar*/
   QToolBar *topToolBar = new QToolBar("Top Toolbar", this);

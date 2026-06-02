@@ -4,11 +4,15 @@
 #include "visualizer_config.h"
 #include <QApplication>
 #include <QByteArray>
+#include <QDialog>
+#include <QEvent>
 #include <QGuiApplication>
 #include <QProcessEnvironment>
 #include <QProcess>
 #include <QFile>
+#include <QTimer>
 #include <QtGlobal>
+#include <QWidget>
 
 #include <algorithm>
 #include <array>
@@ -28,6 +32,46 @@ struct ScreenSize
 {
     int width = 0;
     int height = 0;
+};
+
+class DialogCenteringFilter : public QObject
+{
+public:
+    explicit DialogCenteringFilter(QObject* parent = nullptr)
+        : QObject(parent)
+    {
+    }
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        if (event->type() != QEvent::Show)
+        {
+            return QObject::eventFilter(watched, event);
+        }
+
+        auto* dialog = qobject_cast<QDialog*>(watched);
+        if (!dialog || !dialog->isWindow())
+        {
+            return QObject::eventFilter(watched, event);
+        }
+
+        QTimer::singleShot(0, dialog, [dialog]() {
+            QWidget* anchor = dialog->parentWidget() ? dialog->parentWidget()->window()
+                                                     : QApplication::activeWindow();
+            if (!anchor)
+            {
+                return;
+            }
+
+            QRect anchorRect = anchor->frameGeometry();
+            QRect dialogRect = dialog->frameGeometry();
+            dialog->move(anchorRect.center() -
+                         QPoint(dialogRect.width() / 2, dialogRect.height() / 2));
+        });
+
+        return QObject::eventFilter(watched, event);
+    }
 };
 
 std::optional<std::string>
@@ -313,6 +357,9 @@ int main(int argc, char *argv[])
 #endif
 
     QApplication a(argc, argv);
+    a.installEventFilter(new DialogCenteringFilter(&a));
+    a.setApplicationName("WiFiViz");
+    a.setApplicationDisplayName("WiFiViz");
 
     QFile f(":/qss/dark.qss");
     // QFile f("qss/dark.qss");

@@ -9,12 +9,24 @@ inline void centerWindow(QWidget *window)
 {
     if (!window)
         return;
+    if (!window->isWindow())
+        return;
 
     
     window->adjustSize();  
     window->updateGeometry();
 
     QTimer::singleShot(0, window, [window]() {
+        if (!window->isWindow())
+            return;
+        if (QWidget *parent = window->parentWidget())
+        {
+            QRect parentRect = parent->window()->frameGeometry();
+            QRect winGeom = window->frameGeometry();
+            window->move(parentRect.center() - QPoint(winGeom.width() / 2, winGeom.height() / 2));
+            return;
+        }
+
         QScreen *screen = QGuiApplication::screenAt(window->geometry().center());
         if (!screen)  // fallback
             screen = QGuiApplication::primaryScreen();

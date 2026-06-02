@@ -20,7 +20,7 @@
    <enum>Qt::FocusPolicy::TabFocus</enum>
   </property>
   <property name="windowTitle">
-   <string>Ns3 Visualizer</string>
+   <string>WiFiViz</string>
   </property>
   <property name="toolTipDuration">
    <number>2</number>

@@ -29,6 +29,7 @@
 namespace Ui {
 class Simu_Config;
 }
+class QDialog;
 
 class Simu_Config : public QWidget,public ResettableBase {
   Q_OBJECT
@@ -123,11 +124,14 @@ private:
   QString m_copiedScratchPath;
 
   QPushButton *m_enlargeButton = nullptr;
+  QDialog *m_buildWaitDialog = nullptr;
   JsonHelper *m_jsonHelper = nullptr;
 
   bool ensureScriptGeneratorBuilt(QString &outGeneratorPath);
   QString ns3ProgramPath() const;
   bool generateStandaloneScript(QString &outSceneFileName);
+  void showBuildWaitDialog();
+  void closeBuildWaitDialog();
   QString generatedScratchScriptPath(const QString &projectName) const;
   void cleanupOldGeneratedScratchScripts(const QString &keepFilePath) const;
   void stopPpduReader();

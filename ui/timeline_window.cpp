@@ -26,7 +26,7 @@ TimelineWindow::TimelineWindow(QWidget* parent)
     layout->addWidget(m_detailWindow);
 
     setCentralWidget(central);
-    setWindowTitle("Ns3 Visualizer Timeline");
+    setWindowTitle("WiFiViz");
     resize(1600, 900);
 
     statusBar()->showMessage("Timeline mode");
