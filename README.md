@@ -68,7 +68,7 @@ The optional full-GUI launcher is registered as the module example
 
 ## Requirements
 
-WiFiViz is developed and tested as an ns-3.46 contrib module on Linux. The
+WiFiViz is developed and tested as an ns-3.46 or newer contrib module on Linux. The
 repository must be installed as `contrib/wifiviz` inside an ns-3 source tree;
 some GUI paths and helper launch commands intentionally use that module path.
 
@@ -77,7 +77,7 @@ Required build environment:
 - Linux with a graphical desktop session for the Qt viewer. X11 or Wayland is
   fine. For headless SSH/server runs, use script mode with `launchViewer=false`
   or set up display forwarding before launching `WiFiVizApp`.
-- ns-3.46 source tree configured with CMake.
+- ns-3.46 or newer source tree configured with CMake.
 - CMake 3.16 or newer. The Qt frontend uses CMake AUTOMOC, AUTOUIC, and AUTORCC.
 - A compiler matching ns-3's C++ standard for the ns-3 contrib module.
 - A C++17-capable compiler for the Qt frontend and
