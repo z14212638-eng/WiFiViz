@@ -13,6 +13,16 @@ using namespace ns3;
 namespace
 {
 
+void
+ClearEnvironmentVariableValue(const char* name)
+{
+#ifdef _WIN32
+    _putenv_s(name, "");
+#else
+    unsetenv(name);
+#endif
+}
+
 class WiFiVizMergeDevicesTestCase : public TestCase
 {
   public:
@@ -57,8 +67,8 @@ class WiFiVizSamplingEnvironmentTestCase : public TestCase
   private:
     void DoRun() override
     {
-        unsetenv("WIFIVIZ_PRECISE");
-        unsetenv("WIFIVIZ_SAMPLE_RATE");
+        ClearEnvironmentVariableValue("WIFIVIZ_PRECISE");
+        ClearEnvironmentVariableValue("WIFIVIZ_SAMPLE_RATE");
 
         WiFiVizHelper::ConfigureVisualizerSampling(true, 10);
         NS_TEST_ASSERT_MSG_EQ(std::string(std::getenv("WIFIVIZ_PRECISE")),

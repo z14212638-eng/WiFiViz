@@ -811,8 +811,9 @@ void Simu_Config::Generate_And_Build() {
             }
           });
 
-  emit ns3OutputReady("Running ./ns3 build\n");
-  ns3Process->start("./ns3", {"build"});
+  const QString ns3Program = ns3ProgramPath();
+  emit ns3OutputReady(QString("Running %1 build\n").arg(ns3Program));
+  ns3Process->start(ns3Program, {"build"});
 }
 
 void Simu_Config::StartVisualizationReader() {
@@ -917,9 +918,10 @@ void Simu_Config::Create_And_StartThread() {
     QProcess buildProcess;
     buildProcess.setWorkingDirectory(m_ns3Path);
     QStringList buildArgs = {"build"};
+    const QString ns3Program = ns3ProgramPath();
 
-    emit ns3OutputReady(QString("Building project before run: ./ns3 %1").arg(buildArgs.join(' ')));
-    buildProcess.start("./ns3", buildArgs);
+    emit ns3OutputReady(QString("Building project before run: %1 %2").arg(ns3Program, buildArgs.join(' ')));
+    buildProcess.start(ns3Program, buildArgs);
     if (!buildProcess.waitForFinished(-1)) {
       qWarning() << "ns-3 build did not finish";
       stopPpduReader();
@@ -960,9 +962,10 @@ void Simu_Config::Create_And_StartThread() {
             emit ns3OutputReady(QString("[ns3 run error] code=%1").arg(static_cast<int>(error)));
           });
 
-  const QString runCommand = QStringLiteral("./ns3 run \"%1\"").arg(runTarget);
-  emit ns3OutputReady(QString("Running command: %1").arg(runCommand));
-  ns3Process->start("/bin/bash", {"-lc", runCommand});
+  const QString ns3Program = ns3ProgramPath();
+  const QStringList runArgs = {"run", runTarget};
+  emit ns3OutputReady(QString("Running command: %1 %2").arg(ns3Program, runArgs.join(' ')));
+  ns3Process->start(ns3Program, runArgs);
 
   // ===============================
   // 2. Timeline View
@@ -1059,70 +1062,20 @@ void Simu_Config::RunGeneratedSimulation() {
                                     .arg(static_cast<int>(error)));
           });
 
-  const QString runCommand = QStringLiteral("./ns3 run \"%1\"").arg(runTarget);
-  emit ns3OutputReady(QString("Running command: %1\n").arg(runCommand));
-  ns3Process->start("/bin/bash", {"-lc", runCommand});
-}
-
-QString Simu_Config::resolveUtilsBuildScriptPath() const {
-  // QDir dir(QCoreApplication::applicationDirPath());
-  QDir dir(m_ns3Path);
-  for (int i = 0; i < 5; ++i) {
-    const QString candidate = dir.absoluteFilePath("contrib/wifiviz/ui/utils/build.sh");
-    if (QFileInfo::exists(candidate)) {
-      return candidate;
-    }
-    if (!dir.cdUp()) {
-      break;
-    }
-  }
-  return {};
-}
-
-QString
-Simu_Config::resolveScriptGeneratorPath(const QString &buildScriptPath) const {
-  if (buildScriptPath.isEmpty()) {
-    return {};
-  }
-  const QDir utilsDir = QFileInfo(buildScriptPath).dir();
-  return utilsDir.absoluteFilePath("build/wifiviz-script-generator");
+  const QString ns3Program = ns3ProgramPath();
+  const QStringList runArgs = {"run", runTarget};
+  emit ns3OutputReady(QString("Running command: %1 %2\n").arg(ns3Program, runArgs.join(' ')));
+  ns3Process->start(ns3Program, runArgs);
 }
 
 bool Simu_Config::ensureScriptGeneratorBuilt(QString &outGeneratorPath) {
-  // const QString buildScript = resolveUtilsBuildScriptPath();
-  // if (buildScript.isEmpty()) {
-  //   const QString msg =
-  //       tr("Cannot locate utils/build.sh. Please check installation.");
-  //   emit ns3OutputReady(msg);
-  //   qWarning() << msg;
-  //   return false;
-  // }
-
-  // const QDir utilsDir = QFileInfo(buildScript).dir();
-  // QProcess buildProcess;
-  // buildProcess.setWorkingDirectory(utilsDir.path());
-  // buildProcess.start("bash", {buildScript, m_ns3Path});
-  // if (!buildProcess.waitForFinished(-1)) {
-  //   qWarning() << "Generator build did not finish";
-  //   return false;
-  // }
-
-  // const QByteArray buildOut = buildProcess.readAllStandardOutput();
-  // if (!buildOut.isEmpty()) {
-  //   emit ns3OutputReady(QString::fromUtf8(buildOut));
-  // }
-
-  // const QByteArray buildErr = buildProcess.readAllStandardError();
-  // if (!buildErr.isEmpty()) {
-  //   emit ns3OutputReady(QString::fromUtf8(buildErr));
-  // }
-
-  // if (buildProcess.exitCode() != 0) {
-  //   qWarning() << "Generator build failed with code" << buildProcess.exitCode();
-  //   return false;
-  // }
-
-  const QString generatorPath = m_ns3Path + "/build/wifiviz-script-generator";
+  const QString generatorName =
+#ifdef Q_OS_WIN
+      QStringLiteral("wifiviz-script-generator.exe");
+#else
+      QStringLiteral("wifiviz-script-generator");
+#endif
+  const QString generatorPath = QDir(m_ns3Path).absoluteFilePath("build/" + generatorName);
 
   if (!QFileInfo::exists(generatorPath)) {
     qWarning() << "Generator executable not found:" << generatorPath;
@@ -1131,6 +1084,23 @@ bool Simu_Config::ensureScriptGeneratorBuilt(QString &outGeneratorPath) {
 
   outGeneratorPath = generatorPath;
   return true;
+}
+
+QString Simu_Config::ns3ProgramPath() const {
+  const QDir ns3Dir(m_ns3Path);
+#ifdef Q_OS_WIN
+  const QStringList candidates = {QStringLiteral("ns3.bat"), QStringLiteral("ns3.exe"),
+                                  QStringLiteral("ns3")};
+#else
+  const QStringList candidates = {QStringLiteral("ns3")};
+#endif
+  for (const QString &candidate : candidates) {
+    const QString path = ns3Dir.absoluteFilePath(candidate);
+    if (QFileInfo::exists(path)) {
+      return path;
+    }
+  }
+  return ns3Dir.absoluteFilePath(candidates.front());
 }
 
 QString Simu_Config::generatedScratchScriptPath(const QString &projectName) const {

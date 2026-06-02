@@ -3,10 +3,141 @@
 
 #include <boost/interprocess/shared_memory_object.hpp>
 #include <cstdlib>
+#include <filesystem>
+#include <iostream>
+#include <string>
 #include <unordered_set>
+#include <vector>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 
 namespace ns3
 {
+
+namespace
+{
+
+void
+SetEnvironmentVariableValue(const char* name, const std::string& value)
+{
+#ifdef _WIN32
+    _putenv_s(name, value.c_str());
+#else
+    setenv(name, value.c_str(), 1);
+#endif
+}
+
+void
+ClearEnvironmentVariableValue(const char* name)
+{
+#ifdef _WIN32
+    _putenv_s(name, "");
+#else
+    unsetenv(name);
+#endif
+}
+
+std::filesystem::path
+WiFiVizExecutableName()
+{
+#ifdef _WIN32
+    return "WiFiVizApp.exe";
+#else
+    return "WiFiVizApp";
+#endif
+}
+
+std::filesystem::path
+FindWiFiVizApp()
+{
+    namespace fs = std::filesystem;
+    const fs::path cwd = fs::current_path();
+    const fs::path appName = WiFiVizExecutableName();
+    const std::vector<fs::path> candidates = {
+        cwd / "build" / appName,
+        cwd / appName,
+#ifdef __APPLE__
+        cwd / "build" / "WiFiVizApp.app" / "Contents" / "MacOS" / "WiFiVizApp",
+        cwd / "WiFiVizApp.app" / "Contents" / "MacOS" / "WiFiVizApp",
+#endif
+    };
+
+    for (const auto& candidate : candidates)
+    {
+        if (fs::exists(candidate))
+        {
+            return candidate;
+        }
+    }
+    return {};
+}
+
+bool
+LaunchProcessDetached(const std::filesystem::path& executable)
+{
+#ifdef _WIN32
+    std::wstring commandLine = L"\"" + executable.wstring() + L"\" --timeline-only";
+    STARTUPINFOW startupInfo{};
+    startupInfo.cb = sizeof(startupInfo);
+    PROCESS_INFORMATION processInfo{};
+    const BOOL ok = CreateProcessW(nullptr,
+                                   commandLine.data(),
+                                   nullptr,
+                                   nullptr,
+                                   FALSE,
+                                   0,
+                                   nullptr,
+                                   nullptr,
+                                   &startupInfo,
+                                   &processInfo);
+    if (!ok)
+    {
+        return false;
+    }
+    CloseHandle(processInfo.hThread);
+    CloseHandle(processInfo.hProcess);
+    return true;
+#else
+    const pid_t pid = fork();
+    if (pid < 0)
+    {
+        return false;
+    }
+    if (pid == 0)
+    {
+        const pid_t childPid = fork();
+        if (childPid < 0)
+        {
+            _exit(127);
+        }
+        if (childPid > 0)
+        {
+            _exit(0);
+        }
+
+        const std::string path = executable.string();
+        execl(path.c_str(), path.c_str(), "--timeline-only", static_cast<char*>(nullptr));
+        _exit(127);
+    }
+    int status = 0;
+    if (waitpid(pid, &status, 0) < 0)
+    {
+        return false;
+    }
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+    {
+        return false;
+    }
+    return true;
+#endif
+}
+
+} // namespace
 
 static const std::unordered_map<std::string, WifiStandard> standard_map = {
     {"802.11n", WIFI_STANDARD_80211n},
@@ -519,26 +650,35 @@ QNs3Helper::ConfigureVisualizerSampling(bool precise, uint32_t rough)
 {
     if (precise)
     {
-        setenv("WIFIVIZ_PRECISE", "1", 1);
-        setenv("WIFIVIZ_SAMPLE_RATE", "1", 1);
+        SetEnvironmentVariableValue("WIFIVIZ_PRECISE", "1");
+        SetEnvironmentVariableValue("WIFIVIZ_SAMPLE_RATE", "1");
         return;
     }
 
-    unsetenv("WIFIVIZ_PRECISE");
+    ClearEnvironmentVariableValue("WIFIVIZ_PRECISE");
     if (rough > 1)
     {
-        setenv("WIFIVIZ_SAMPLE_RATE", std::to_string(rough).c_str(), 1);
+        SetEnvironmentVariableValue("WIFIVIZ_SAMPLE_RATE", std::to_string(rough));
         return;
     }
-    unsetenv("WIFIVIZ_SAMPLE_RATE");
+    ClearEnvironmentVariableValue("WIFIVIZ_SAMPLE_RATE");
 }
 
 bool
 QNs3Helper::LaunchTimelineViewerAsync()
 {
-    const int ret =
-        std::system("sh contrib/wifiviz/tools/wifiviz-hidden.sh build/WiFiVizApp --timeline-only");
-    return ret == 0;
+    const auto appPath = FindWiFiVizApp();
+    if (appPath.empty())
+    {
+        std::cerr << "WiFiViz: cannot find WiFiVizApp in the current ns-3 directory" << std::endl;
+        return false;
+    }
+    if (!LaunchProcessDetached(appPath))
+    {
+        std::cerr << "WiFiViz: failed to launch " << appPath << std::endl;
+        return false;
+    }
+    return true;
 }
 
 Ptr<SniffUtils>
@@ -559,7 +699,10 @@ QNs3Helper::EnableVisualizer(const NetDeviceContainer& devices,
     }
 
     Ptr<SniffUtils> sniffUtils = CreateObject<SniffUtils>();
-    sniffUtils->Initialize(devices, simulationTime);
+    if (!sniffUtils->Initialize(devices, simulationTime))
+    {
+        return nullptr;
+    }
     return sniffUtils;
 }
 

@@ -125,9 +125,8 @@ private:
   QPushButton *m_enlargeButton = nullptr;
   JsonHelper *m_jsonHelper = nullptr;
 
-  QString resolveUtilsBuildScriptPath() const;
-  QString resolveScriptGeneratorPath(const QString &buildScriptPath) const;
   bool ensureScriptGeneratorBuilt(QString &outGeneratorPath);
+  QString ns3ProgramPath() const;
   bool generateStandaloneScript(QString &outSceneFileName);
   QString generatedScratchScriptPath(const QString &projectName) const;
   void cleanupOldGeneratedScratchScripts(const QString &keepFilePath) const;

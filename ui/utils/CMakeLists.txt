@@ -9,27 +9,13 @@ if(NOT NS3_ROOT)
     message(FATAL_ERROR "NS3_ROOT not set. Pass -DNS3_ROOT=/path/to/ns-3")
 endif()
 
-# 查找 nlohmann_json 库
-find_package(nlohmann_json 3.2.0)
+find_package(nlohmann_json 3.2.0 REQUIRED)
 
-if(nlohmann_json_FOUND)
-    # 如果系统安装了 nlohmann_json
-    add_executable(wifiviz-script-generator wifiviz-script-generator.cc)
-    target_link_libraries(wifiviz-script-generator nlohmann_json::nlohmann_json)
-else()
-    # 如果没有安装，尝试使用头文件版本
-    # 你可以从 https://github.com/nlohmann/json/releases 下载 json.hpp
-    # 并放在 include/nlohmann/ 目录下
-    message(STATUS "nlohmann_json not found, using header-only version")
-    add_executable(wifiviz-script-generator wifiviz-script-generator.cc)
-    target_include_directories(wifiviz-script-generator PRIVATE
-        ${NS3_ROOT}/contrib/wifiviz/model
-        /usr/include
-        /usr/local/include
-    )
+add_executable(wifiviz-script-generator wifiviz-script-generator.cc)
+target_link_libraries(wifiviz-script-generator nlohmann_json::nlohmann_json)
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.0)
+    target_link_libraries(wifiviz-script-generator stdc++fs)
 endif()
-
-# 使用 filesystem 库
-target_link_libraries(wifiviz-script-generator stdc++fs)
 
 install(TARGETS wifiviz-script-generator DESTINATION bin)

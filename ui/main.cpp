@@ -5,6 +5,7 @@
 #include <QApplication>
 #include <QByteArray>
 #include <QGuiApplication>
+#include <QProcessEnvironment>
 #include <QProcess>
 #include <QFile>
 #include <QtGlobal>
@@ -32,6 +33,7 @@ struct ScreenSize
 std::optional<std::string>
 RunCommand(const char* command)
 {
+#ifdef Q_OS_LINUX
     std::array<char, 256> buffer{};
     std::string output;
 
@@ -52,6 +54,9 @@ RunCommand(const char* command)
         return std::nullopt;
     }
     return output;
+#else
+    return std::nullopt;
+#endif
 }
 
 std::optional<ScreenSize>
@@ -155,15 +160,15 @@ ScreenSizeFromXdpyinfo()
 std::optional<double>
 ScaleFromEnvironment()
 {
-    const char* value = std::getenv("WIFIVIZ_UI_SCALE");
-    if (!value)
+    const QByteArray value = qgetenv("WIFIVIZ_UI_SCALE");
+    if (value.isEmpty())
     {
         return std::nullopt;
     }
 
     char* end = nullptr;
-    const double scale = std::strtod(value, &end);
-    if (end == value || scale <= 0.0)
+    const double scale = std::strtod(value.constData(), &end);
+    if (end == value.constData() || scale <= 0.0)
     {
         return std::nullopt;
     }
@@ -173,16 +178,17 @@ ScaleFromEnvironment()
 void
 ApplyDesignScale()
 {
-    if (const char* disabled = std::getenv("WIFIVIZ_DISABLE_AUTO_SCALE"))
+    const QString disabled = qEnvironmentVariable("WIFIVIZ_DISABLE_AUTO_SCALE").trimmed();
+    if (!disabled.isEmpty())
     {
-        const std::string value(disabled);
-        if (value == "1" || value == "true" || value == "TRUE")
+        const QString value = disabled.toLower();
+        if (value == "1" || value == "true")
         {
             return;
         }
     }
 
-    if (!ScaleFromEnvironment() && std::getenv("QT_SCALE_FACTOR"))
+    if (!ScaleFromEnvironment() && qEnvironmentVariableIsSet("QT_SCALE_FACTOR"))
     {
         return;
     }
@@ -268,15 +274,15 @@ ApplySamplingConfig(const QStringList& args)
 
     if (!hasCliPrecise && !hasCliRough)
     {
-        if (const char* envPrecise = std::getenv("WIFIVIZ_PRECISE"))
+        if (qEnvironmentVariableIsSet("WIFIVIZ_PRECISE"))
         {
-            const QString value = QString::fromLocal8Bit(envPrecise).trimmed().toLower();
+            const QString value = qEnvironmentVariable("WIFIVIZ_PRECISE").trimmed().toLower();
             precise = (value == "1" || value == "true" || value == "yes");
         }
-        if (const char* envRate = std::getenv("WIFIVIZ_SAMPLE_RATE"))
+        if (qEnvironmentVariableIsSet("WIFIVIZ_SAMPLE_RATE"))
         {
             bool ok = false;
-            const int value = QString::fromLocal8Bit(envRate).toInt(&ok);
+            const int value = qEnvironmentVariableIntValue("WIFIVIZ_SAMPLE_RATE", &ok);
             if (ok && value > 1)
             {
                 precise = false;

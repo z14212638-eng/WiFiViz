@@ -47,8 +47,9 @@ wifiviz/
 ```
 
 Install the repository itself as `/path/to/ns-3.46/contrib/wifiviz`.
-The optional full-GUI launcher is stored inside the module at
-`tools/visualizer.cc` and can be copied into ns-3 `scratch/`.
+The optional full-GUI launcher lives inside the module at
+`tools/visualizer.cc` and is registered as the module example
+`wifiviz-visualizer`.
 
 ## Main Capabilities
 
@@ -81,8 +82,7 @@ Required build environment:
   or set up display forwarding before launching `WiFiVizApp`.
 - ns-3.46 source tree configured with CMake.
 - CMake 3.16 or newer. The Qt frontend uses CMake AUTOMOC, AUTOUIC, and AUTORCC.
-- A C++23-capable compiler for the ns-3 contrib module and scratch launcher.
-  GCC with libstdc++ is the recommended toolchain.
+- A compiler matching ns-3's C++ standard for the ns-3 contrib module.
 - A C++17-capable compiler for the Qt frontend and
   `wifiviz-script-generator`. In practice this is normally the same compiler.
 
@@ -95,14 +95,13 @@ Required third-party libraries and tools:
 
 - Qt Core, Gui, and Widgets development packages. Qt 6 is preferred; Qt 5.15 is
   the fallback supported by the CMake files.
-- Boost headers, specifically Boost Interprocess, for shared-memory transport
-  between ns-3 and the Qt viewer.
+- Boost 1.71 or newer headers, specifically Boost Interprocess, for
+  shared-memory transport between ns-3 and the Qt viewer.
 - nlohmann JSON headers and CMake package. The module parser includes
   `nlohmann/json.hpp`, and the script generator looks for
   `nlohmann_json >= 3.2.0`.
-- POSIX shell tools: `/bin/bash`, `sh`, and `nohup`. The GUI uses `bash -lc`
-  when running ns-3 commands, and script mode uses `tools/wifiviz-hidden.sh` to
-  launch the timeline viewer in the background.
+- The GUI launches ns-3 and the timeline viewer directly through platform
+  process APIs; no POSIX shell wrapper is required for normal operation.
 - Standard ns-3 build tools such as `git`, `python3`, `pkg-config`, CMake, and
   Ninja or Make.
 
@@ -128,12 +127,13 @@ sudo apt install -y \
 Notes:
 
 - `libboost-all-dev` can be replaced with a smaller Boost development package
-  if it includes Boost Interprocess headers on your distribution.
+  if it provides Boost 1.71 or newer and includes Boost Interprocess headers on
+  your distribution.
 - The project does not use Qt Charts, Qt OpenGL, Qt Network, Qt Multimedia, or
   Qt Concurrent. Installing `qt6-base-dev` or `qtbase5-dev` is enough for the
   current frontend.
-- The generator target links `stdc++fs` for filesystem compatibility, so a
-  GCC/libstdc++ toolchain is the least surprising option.
+- The generator target links `stdc++fs` only when building with GCC older than
+  9.0 for filesystem compatibility.
 
 ## Installation
 
@@ -145,36 +145,24 @@ cd /path/to/ns-3.46/contrib
 git clone <repo-url> wifiviz
 ```
 
-Copy the full-GUI launcher from the module into ns-3 `scratch/`:
+The full-GUI launcher in `tools/visualizer.cc` is registered as the module
+example `wifiviz-visualizer`, so it can be started directly with
+`./ns3 run wifiviz-visualizer`. No copy into `scratch/` is required.
 
-```bash
-cd /path/to/ns-3.46
-cp contrib/wifiviz/tools/visualizer.cc scratch/visualizer.cc
-```
-
-This extra copy step is intentional. `./ns3 run visualizer` works because ns-3
-automatically treats `scratch/visualizer.cc` as a user script target named
-`visualizer`. Without this scratch launcher, supporting the same command would
-require changing ns-3's own source tree or build/run rules, for example by
-adding a built-in runner target or modifying how `./ns3 run` discovers
-non-scratch executables. This project avoids destructive changes to ns-3 and
-keeps WiFiViz as a plugin-style contrib module plus an optional scratch
-launcher.
-
-The final paths must be:
+The final path must be:
 
 ```text
 /path/to/ns-3.46/contrib/wifiviz
-/path/to/ns-3.46/scratch/visualizer.cc
 ```
 
 ## Build
 
-Configure and build ns-3 from the ns-3 root directory:
+Configure and build ns-3 from the ns-3 root directory. Enable examples so the
+`wifiviz-visualizer` launcher target is built:
 
 ```bash
 cd /path/to/ns-3.46
-./ns3 configure
+./ns3 configure --enable-examples
 ./ns3 build
 ```
 
@@ -321,23 +309,17 @@ Full mode starts the WiFiViz GUI first and lets the GUI generate a scratch
 script from the configuration pages. This mode is useful for quickly trying the
 graphical configuration workflow.
 
-Copy the launcher into ns-3 `scratch/`:
-
-```bash
-cd /path/to/ns-3.46
-cp contrib/wifiviz/tools/visualizer.cc scratch/visualizer.cc
-```
-
 Start the GUI through ns-3:
 
 ```bash
-./ns3 run visualizer
+cd /path/to/ns-3.46
+./ns3 run wifiviz-visualizer
 ```
 
-The `visualizer` launcher is the `scratch/visualizer.cc` file copied above.
-ns-3 builds it as a normal scratch target named `visualizer`. The launcher only
-starts `build/WiFiVizApp` from the ns-3 root; it does not modify ns-3 internals.
-If you only need to start the Qt application directly, use:
+`wifiviz-visualizer` is the module example built from `tools/visualizer.cc`.
+The launcher only starts `build/WiFiVizApp` from the ns-3 root; it does not
+modify ns-3 internals. If you only need to start the Qt application directly,
+use:
 
 ```bash
 ./build/WiFiVizApp
@@ -699,7 +681,7 @@ contrib/wifiviz/
     └── utils/
         └── wifiviz-script-generator.cc
 └── tools/
-    └── visualizer.cc          # copy to scratch/ for `./ns3 run visualizer`
+    └── visualizer.cc          # module example: `./ns3 run wifiviz-visualizer`
 ```
 
 ## Troubleshooting

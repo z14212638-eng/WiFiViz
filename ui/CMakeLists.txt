@@ -146,7 +146,6 @@ target_compile_definitions(WiFiVizApp PRIVATE
 # Set target properties
 set_target_properties(WiFiVizApp PROPERTIES
     WIN32_EXECUTABLE TRUE
-    MACOSX_BUNDLE TRUE
 )
 
 # Qt6 specific finalization

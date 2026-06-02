@@ -33,7 +33,9 @@
 
 #include <boost/interprocess/managed_shared_memory.hpp>
 #include <boost/interprocess/sync/scoped_lock.hpp>
+#include <cstddef>
 #include <deque>
+#include <iostream>
 #include <unordered_set>
 
 using namespace boost::interprocess;
@@ -306,6 +308,7 @@ UpdateRealtimeThroughput(PPDU_Meta& meta, uint32_t newlyReceivedBytes)
 std::unordered_map<ppdu_id_t, PpduRuntime> m_ppdu_runtime;
 
 constexpr const char* SHM_NAME = "Ns3PpduSharedMemory";
+constexpr std::size_t SHM_SEGMENT_SIZE = sizeof(RingBuffer) + 64 * 1024;
 static const double SimulationTime = 0.0;
 NS_LOG_COMPONENT_DEFINE("SniffUtils");
 NS_OBJECT_ENSURE_REGISTERED(SniffUtils);
@@ -348,10 +351,25 @@ SniffUtils::Initialize(const NetDeviceContainer& devices, double simulationTime)
 {
     this->Set_simulation_time(simulationTime);
 
-    m_shm = new boost::interprocess::managed_shared_memory(boost::interprocess::open_or_create,
-                                                           SHM_NAME,
-                                                           1024UL * 1024 * 1024); // 1GB
-    m_ring = m_shm->find_or_construct<RingBuffer>("PpduRing")();
+    try
+    {
+        m_shm = new boost::interprocess::managed_shared_memory(boost::interprocess::open_or_create,
+                                                               SHM_NAME,
+                                                               SHM_SEGMENT_SIZE);
+        m_ring = m_shm->find_or_construct<RingBuffer>("PpduRing")();
+    }
+    catch (const boost::interprocess::interprocess_exception& e)
+    {
+        std::cerr << "WiFiViz: failed to initialize shared memory segment '"
+                  << SHM_NAME << "' (" << SHM_SEGMENT_SIZE << " bytes): "
+                  << e.get_error_code() << " - " << e.what() << std::endl;
+        delete m_shm;
+        m_shm = nullptr;
+        m_ring = nullptr;
+        m_initialized = false;
+        return false;
+    }
+
     m_ring->write_index = 0;
     m_ring->read_index = 0;
     g_throughputWindow.clear();
@@ -1060,8 +1078,7 @@ AppendPpdu(RingBuffer* buffer, const PPDU_Meta& ppdu)
 void
 ShmExample()
 {
-    managed_shared_memory shm(open_or_create, SHM_NAME,
-                              1024UL * 1024 * 1024); // 1GB
+    managed_shared_memory shm(open_or_create, SHM_NAME, SHM_SEGMENT_SIZE);
 
     RingBuffer* ring = shm.find_or_construct<RingBuffer>("PpduRing")();
     ring->write_index = 0;
