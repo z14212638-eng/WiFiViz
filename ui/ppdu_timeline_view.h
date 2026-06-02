@@ -153,6 +153,8 @@ private:
     void updateDetailWindow(int idx);
     QString roleLabel(uint64_t mac) const;
     QString roleTooltip(uint64_t mac) const;
+    bool showRowLabelTooltip(const QPoint &pos);
+    void hideHoverUi();
     DeviceRole deviceRole(uint64_t mac) const;
     DeviceRole deviceRoleForNode(uint16_t nodeId) const;
     QString nodeRoleLabel(uint16_t nodeId) const;

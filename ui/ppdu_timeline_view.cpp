@@ -972,6 +972,76 @@ QString PpduTimelineView::roleTooltip(uint64_t mac) const
         .arg(formatMac(mac));
 }
 
+bool PpduTimelineView::showRowLabelTooltip(const QPoint &pos)
+{
+    if (m_viewMode != TimelineViewMode::PpduTimeline &&
+        m_viewMode != TimelineViewMode::MloChannelTimeline &&
+        m_viewMode != TimelineViewMode::RxTimeline)
+    {
+        return false;
+    }
+
+    ensurePpduLayoutCache();
+    const int rowCount = m_cachedPpduRows.size();
+    if (rowCount == 0)
+        return false;
+
+    const int availH = height() - m_topMargin - kBottomMargin;
+    const int rowH = std::clamp(availH / rowCount, 18, 80);
+    int topY = m_topMargin;
+    if (availH > rowCount * rowH)
+        topY += (availH - rowCount * rowH) / 2;
+
+    for (int rowIndex = 0; rowIndex < m_cachedPpduRows.size(); ++rowIndex)
+    {
+        const auto &rowInfo = m_cachedPpduRows[rowIndex];
+        const QRect labelRect(0, topY + rowIndex * rowH, m_leftMargin - 10, rowH);
+        if (!labelRect.contains(pos))
+            continue;
+
+        QString text;
+        if (m_rowMode == TimelineRowMode::ByChannel)
+        {
+            const int ch = static_cast<int>(rowInfo.rowKey);
+            text = QString("Channel %1 (%2)").arg(ch).arg(channelBand(ch));
+        }
+        else if (m_rowMode == TimelineRowMode::ByNodeLink)
+        {
+            const int idx = rowInfo.itemIndices.isEmpty() ? -1 : rowInfo.itemIndices.first();
+            if (idx >= 0 && idx < m_ppduItems.size())
+            {
+                const auto &item = m_ppduItems[idx];
+                text = QString("%1\nLink %2\nChannel %3 (%4)")
+                           .arg(nodeRoleLabel(item.nodeId))
+                           .arg(item.linkId)
+                           .arg(item.channel_number)
+                           .arg(channelBand(item.channel_number));
+            }
+        }
+        else
+        {
+            text = roleTooltip(rowInfo.rowKey);
+        }
+
+        if (text.isEmpty())
+            return false;
+
+        const int y = topY + rowIndex * rowH + rowH / 2;
+        QToolTip::showText(mapToGlobal(QPoint(8, y)), text, this, labelRect);
+        return true;
+    }
+
+    return false;
+}
+
+void PpduTimelineView::hideHoverUi()
+{
+    m_hoverIndex = -1;
+    if (m_overlay)
+        m_overlay->close();
+    QToolTip::hideText();
+}
+
 QColor PpduTimelineView::senderColor(uint64_t mac) const
 {
     const uint hue = qHash(static_cast<quint64>(mac)) % 360;
@@ -1559,12 +1629,11 @@ void PpduTimelineView::clear()
     m_phyStateEndNs = 0;
     m_dataUpdateQueued = false;
     m_phyStateUpdateQueued = false;
-    m_hoverIndex = -1;
+    hideHoverUi();
     m_selectedIndex = -1;
     m_pressedIndex = -1;
     m_deviceInfoMap.clear();
     m_nodeToMacMap.clear();
-    m_overlay->close();
     if (m_detailWindow)
     {
         m_detailWindow->clearDetails();
@@ -1727,37 +1796,7 @@ void PpduTimelineView::paintPpduTimeline(QPainter &painter)
                          Qt::AlignVCenter | Qt::AlignLeft,
                          rowInfo.label);
 
-	        if (labelRect.contains(m_mousePos))
-	        {
-	            if (m_rowMode == TimelineRowMode::ByChannel)
-	            {
-                const int ch = static_cast<int>(rowInfo.rowKey);
-                QToolTip::showText(mapToGlobal(QPoint(8, y)),
-	                                   QString("Channel %1 (%2)").arg(ch).arg(channelBand(ch)),
-	                                   this);
-	            }
-	            else if (m_rowMode == TimelineRowMode::ByNodeLink)
-	            {
-	                const int idx = rowInfo.itemIndices.isEmpty() ? -1 : rowInfo.itemIndices.first();
-	                if (idx >= 0 && idx < m_ppduItems.size())
-	                {
-	                    const auto& item = m_ppduItems[idx];
-	                    QToolTip::showText(
-	                        mapToGlobal(QPoint(8, y)),
-	                        QString("%1\nLink %2\nChannel %3 (%4)")
-	                            .arg(nodeRoleLabel(item.nodeId))
-	                            .arg(item.linkId)
-	                            .arg(item.channel_number)
-	                            .arg(channelBand(item.channel_number)),
-	                        this);
-	                }
-	            }
-	            else
-	            {
-	                QToolTip::showText(mapToGlobal(QPoint(8, y)), roleTooltip(rowInfo.rowKey), this);
-	            }
-        }
-    }
+	    }
     painter.setPen(QColor(180, 180, 180));
     painter.drawLine(m_leftMargin - 8, topY, m_leftMargin - 8, conflictBottomY);
 
@@ -1954,12 +1993,6 @@ void PpduTimelineView::paintRxTimeline(QPainter &painter)
                          Qt::AlignVCenter | Qt::AlignLeft,
                          rowInfo.label);
 
-        if (labelRect.contains(m_mousePos))
-        {
-            QToolTip::showText(mapToGlobal(QPoint(8, y)),
-                               roleTooltip(rowInfo.rowKey),
-                               this);
-        }
     }
 
     painter.setPen(QColor(180, 180, 180));
@@ -2699,8 +2732,7 @@ void PpduTimelineView::onSetTimeRange()
     m_viewStartNs = clampViewStartNs(m_viewStartNs, m_nsToPixel);
     syncRangeSliderToView();
 
-    m_hoverIndex = -1;
-    m_overlay->close();
+    hideHoverUi();
     update();
 }
 
@@ -2730,8 +2762,7 @@ void PpduTimelineView::wheelEvent(QWheelEvent *event)
     const double requestedStartNs = anchorNs - anchorPx / m_nsToPixel;
     m_viewStartNs = clampViewStartNs(requestedStartNs, m_nsToPixel);
     syncRangeSliderToView();
-    m_hoverIndex = -1;
-    m_overlay->close();
+    hideHoverUi();
     update();
     event->accept();
 }
@@ -2739,8 +2770,7 @@ void PpduTimelineView::wheelEvent(QWheelEvent *event)
 void PpduTimelineView::mousePressEvent(QMouseEvent *e)
 {
     m_showingStats = false;
-    m_overlay->close();
-    QToolTip::hideText();
+    hideHoverUi();
     m_mousePos = e->pos();
 
     int barY = height() - kRangeBarHeight - kRangeBarBottomPadding;
@@ -2770,7 +2800,7 @@ void PpduTimelineView::mousePressEvent(QMouseEvent *e)
     }
 
     m_showingStats = false;
-    m_overlay->close();
+    hideHoverUi();
 
     if (childAt(e->pos()) == m_btnLegend ||
         childAt(e->pos()) == m_btnSave ||
@@ -2809,6 +2839,7 @@ void PpduTimelineView::mouseMoveEvent(QMouseEvent *e)
 
     if (m_rangeDragging)
     {
+        hideHoverUi();
         const auto [dataStartNs, dataEndNs] = currentTimeBounds();
         if (dataEndNs <= dataStartNs)
             return;
@@ -2848,6 +2879,9 @@ void PpduTimelineView::mouseMoveEvent(QMouseEvent *e)
 
     if (m_selecting)
     {
+        if (m_overlay)
+            m_overlay->close();
+        QToolTip::hideText();
         m_selectEnd = e->pos();
         update();
         return;
@@ -2870,12 +2904,13 @@ void PpduTimelineView::mouseMoveEvent(QMouseEvent *e)
             update();
         }
 
-        m_overlay->close();
+        hideHoverUi();
         return;
     }
     if (m_viewMode == TimelineViewMode::ChannelState)
     {
         m_hoverIndex = -1;
+        QToolTip::hideText();
         if (!showChannelStateHover(e->pos()))
             m_overlay->close();
         update();
@@ -2885,6 +2920,7 @@ void PpduTimelineView::mouseMoveEvent(QMouseEvent *e)
     if (m_viewMode == TimelineViewMode::MloChannelState)
     {
         m_hoverIndex = -1;
+        QToolTip::hideText();
         if (!showMloChannelStateHover(e->pos()))
             m_overlay->close();
         update();
@@ -2894,6 +2930,7 @@ void PpduTimelineView::mouseMoveEvent(QMouseEvent *e)
     if (m_viewMode == TimelineViewMode::PhyStateTimeline)
     {
         m_hoverIndex = -1;
+        QToolTip::hideText();
         if (!showPhyStateHover(e->pos()))
             m_overlay->close();
         update();
@@ -2904,7 +2941,10 @@ void PpduTimelineView::mouseMoveEvent(QMouseEvent *e)
     int idx = hitTest(e->pos());
 
     m_hoverIndex = idx;
-    m_overlay->close();
+    if (m_overlay)
+        m_overlay->close();
+    if (idx >= 0 || !showRowLabelTooltip(e->pos()))
+        QToolTip::hideText();
     update();
 }
 
@@ -2980,6 +3020,7 @@ void PpduTimelineView::mouseReleaseEvent(QMouseEvent *e)
         }
 
         m_hoverIndex = -1;
+        QToolTip::hideText();
         update();
     }
 
@@ -2997,9 +3038,7 @@ void PpduTimelineView::mouseReleaseEvent(QMouseEvent *e)
 void PpduTimelineView::leaveEvent(QEvent *)
 {
     m_showingStats = false;
-    m_hoverIndex = -1;
-    m_overlay->close();
-    QToolTip::hideText();
+    hideHoverUi();
     update();
 }
 
