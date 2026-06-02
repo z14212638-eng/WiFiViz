@@ -51,7 +51,7 @@
          </font>
         </property>
         <property name="text">
-         <string>NS-3 Visualizer</string>
+         <string>Wifi Visualizer</string>
         </property>
        </widget>
       </item>

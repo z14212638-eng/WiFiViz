@@ -161,7 +161,8 @@ void Simu_Config::closeBuildWaitDialog() {
   m_buildWaitDialog = nullptr;
   if (auto *buildDialog = dynamic_cast<BuildWaitDialog *>(dialog))
     buildDialog->allowClose();
-  dialog->close();
+  dialog->hide();
+  dialog->deleteLater();
 }
 
 void Simu_Config::refreshFlowTargetSources() {
@@ -873,6 +874,7 @@ void Simu_Config::Generate_And_Build() {
           [this](QProcess::ProcessError error) {
             emit ns3OutputReady(QString("[ns3 build error] code=%1\n")
                                     .arg(static_cast<int>(error)));
+            closeBuildWaitDialog();
           });
 
   connect(ns3Process,
