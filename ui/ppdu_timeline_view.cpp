@@ -39,6 +39,24 @@ static constexpr int kRangeBarBottomPadding = 10;
 
 static constexpr uint64_t kBroadcastMac = 0xFFFFFFFFFFFFULL;
 
+static inline QPoint eventPosition(const QMouseEvent *event)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    return event->position().toPoint();
+#else
+    return event->pos();
+#endif
+}
+
+static inline QPoint eventPosition(const QWheelEvent *event)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    return event->position().toPoint();
+#else
+    return event->pos();
+#endif
+}
+
 static inline bool isBroadcastMac(uint64_t addr)
 {
     uint64_t low48 = addr & 0xFFFFFFFFFFFFULL;
@@ -2748,7 +2766,7 @@ void PpduTimelineView::wheelEvent(QWheelEvent *event)
     }
 
     const int usableWidth = usableTimelineWidth();
-    const int mouseX = std::clamp(event->position().toPoint().x(), m_leftMargin, m_leftMargin + usableWidth);
+    const int mouseX = std::clamp(eventPosition(event).x(), m_leftMargin, m_leftMargin + usableWidth);
     const double anchorPx = double(mouseX - m_leftMargin);
     const double anchorNs = double(m_viewStartNs) + anchorPx / std::max(m_nsToPixel, 1e-12);
 
@@ -2776,24 +2794,25 @@ void PpduTimelineView::mousePressEvent(QMouseEvent *e)
     int barY = height() - kRangeBarHeight - kRangeBarBottomPadding;
     int barX = m_leftMargin;
     int barW = width() - m_leftMargin - kRangeBarMargin;
+    const QPoint eventPos = eventPosition(e);
 
     if (e->button() == Qt::LeftButton &&
-        e->y() >= barY && e->y() <= barY + kRangeBarHeight)
+        eventPos.y() >= barY && eventPos.y() <= barY + kRangeBarHeight)
     {
         int leftX = barX + m_rangeStart * barW;
         int rightX = barX + m_rangeEnd * barW;
 
-        if (qAbs(e->x() - leftX) < 6)
+        if (qAbs(eventPos.x() - leftX) < 6)
             m_dragLeftHandle = true;
-        else if (qAbs(e->x() - rightX) < 6)
+        else if (qAbs(eventPos.x() - rightX) < 6)
             m_dragRightHandle = true;
-        else if (e->x() > leftX && e->x() < rightX)
+        else if (eventPos.x() > leftX && eventPos.x() < rightX)
             m_dragRangeBody = true;
 
         if (m_dragLeftHandle || m_dragRightHandle || m_dragRangeBody)
         {
             m_rangeDragging = true;
-            m_lastRangeX = e->x();
+            m_lastRangeX = eventPos.x();
             setCursor(Qt::SizeHorCursor);
             return;
         }
@@ -2836,6 +2855,7 @@ void PpduTimelineView::mousePressEvent(QMouseEvent *e)
 void PpduTimelineView::mouseMoveEvent(QMouseEvent *e)
 {
     m_mousePos = e->pos();
+    const int eventX = eventPosition(e).x();
 
     if (m_rangeDragging)
     {
@@ -2845,7 +2865,7 @@ void PpduTimelineView::mouseMoveEvent(QMouseEvent *e)
             return;
 
         int barW = width() - m_leftMargin - kRangeBarMargin;
-        double dx = double(e->x() - m_lastRangeX) / double(barW);
+        double dx = double(eventX - m_lastRangeX) / double(barW);
 
         if (m_dragLeftHandle)
             m_rangeStart = std::clamp(m_rangeStart + dx, 0.0, m_rangeEnd - 0.01);
@@ -2869,7 +2889,7 @@ void PpduTimelineView::mouseMoveEvent(QMouseEvent *e)
         m_nsToPixel = double(usableWidth) /
                       double((m_rangeEnd - m_rangeStart) * span);
 
-        m_lastRangeX = e->x();
+        m_lastRangeX = eventX;
         update();
         return;
     }

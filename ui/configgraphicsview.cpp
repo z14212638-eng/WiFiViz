@@ -1,6 +1,24 @@
 #include "configgraphicsview.h"
 #include <QWheelEvent>
 #include <QMouseEvent>
+#include <QtGlobal>
+
+namespace {
+
+QMouseEvent makeLeftButtonDragEvent(const QMouseEvent *event, Qt::MouseButtons buttons)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    return QMouseEvent(event->type(), event->position(), event->scenePosition(),
+                       event->globalPosition(), Qt::LeftButton, buttons,
+                       event->modifiers());
+#else
+    return QMouseEvent(event->type(), event->localPos(), event->windowPos(),
+                       event->screenPos(), Qt::LeftButton, buttons,
+                       event->modifiers());
+#endif
+}
+
+} // namespace
 
 ConfigGraphicsView::ConfigGraphicsView(QWidget *parent)
     : QGraphicsView(parent)
@@ -28,8 +46,7 @@ void ConfigGraphicsView::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::MiddleButton) {
         setDragMode(ScrollHandDrag);
-        QMouseEvent fake(event->type(), event->position(),
-                         Qt::LeftButton, Qt::LeftButton, event->modifiers());
+        QMouseEvent fake = makeLeftButtonDragEvent(event, Qt::LeftButton);
         QGraphicsView::mousePressEvent(&fake);
         return;
     }
@@ -40,8 +57,7 @@ void ConfigGraphicsView::mouseReleaseEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::MiddleButton) {
         setDragMode(NoDrag);
-        QMouseEvent fake(event->type(), event->position(),
-                         Qt::LeftButton, Qt::NoButton, event->modifiers());
+        QMouseEvent fake = makeLeftButtonDragEvent(event, Qt::NoButton);
         QGraphicsView::mouseReleaseEvent(&fake);
         return;
     }
