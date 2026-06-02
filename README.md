@@ -144,7 +144,7 @@ git clone https://github.com/z14212638-eng/WiFiViz.git wifiviz
 
 The full-GUI launcher is registered as the module example
 `wifiviz-visualizer`, so it can be started directly with `./ns3 run
-wifiviz-visualizer`. No copy into `scratch/` is required.
+wifiviz-visualizer`.
 
 The final path must be:
 
