@@ -139,7 +139,7 @@ name must be `wifiviz` so ns-3 sees the expected module path:
 
 ```bash
 cd /path/to/ns-3.46/contrib
-git clone https://github.com/z14212638-eng/WiFiViz.git wifiviz
+git clone --depth 1 https://github.com/z14212638-eng/WiFiViz.git wifiviz
 ```
 
 The full-GUI launcher is registered as the module example
