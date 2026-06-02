@@ -12,6 +12,6 @@ build_lib_example(
 
 build_lib_example(
     NAME wifiviz-visualizer
-    SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/../tools/visualizer.cc
+    SOURCE_FILES wifiviz-visualizer.cc
     LIBRARIES_TO_LINK ${libwifiviz} ${libcore}
 )

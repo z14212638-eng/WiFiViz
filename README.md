@@ -38,8 +38,6 @@ wifiviz/
 ├── doc/
 ├── examples/
 ├── helper/
-├── tools/
-│   └── visualizer.cc
 ├── model/
 ├── test/
 ├── ui/
@@ -47,8 +45,7 @@ wifiviz/
 ```
 
 Install the repository itself as `/path/to/ns-3.46/contrib/wifiviz`.
-The optional full-GUI launcher lives inside the module at
-`tools/visualizer.cc` and is registered as the module example
+The optional full-GUI launcher is registered as the module example
 `wifiviz-visualizer`.
 
 ## Main Capabilities
@@ -145,9 +142,9 @@ cd /path/to/ns-3.46/contrib
 git clone <repo-url> wifiviz
 ```
 
-The full-GUI launcher in `tools/visualizer.cc` is registered as the module
-example `wifiviz-visualizer`, so it can be started directly with
-`./ns3 run wifiviz-visualizer`. No copy into `scratch/` is required.
+The full-GUI launcher is registered as the module example
+`wifiviz-visualizer`, so it can be started directly with `./ns3 run
+wifiviz-visualizer`. No copy into `scratch/` is required.
 
 The final path must be:
 
@@ -316,10 +313,10 @@ cd /path/to/ns-3.46
 ./ns3 run wifiviz-visualizer
 ```
 
-`wifiviz-visualizer` is the module example built from `tools/visualizer.cc`.
-The launcher only starts `build/WiFiVizApp` from the ns-3 root; it does not
-modify ns-3 internals. If you only need to start the Qt application directly,
-use:
+`wifiviz-visualizer` is the module example built from
+`examples/wifiviz-visualizer.cc`. The launcher only starts `build/WiFiVizApp`
+from the ns-3 root; it does not modify ns-3 internals. If you only need to
+start the Qt application directly, use:
 
 ```bash
 ./build/WiFiVizApp
@@ -680,8 +677,6 @@ contrib/wifiviz/
     ├── process_terminal.*     # output viewer
     └── utils/
         └── wifiviz-script-generator.cc
-└── tools/
-    └── visualizer.cc          # module example: `./ns3 run wifiviz-visualizer`
 ```
 
 ## Troubleshooting
