@@ -287,7 +287,6 @@ void Ap_config::setPosition(Ap &one_ap)
         double z_rand = get_true_random_double(0, z_max);
 
         one_ap.m_position = {x_rand, y_rand, z_rand};
-        std::cout << "The position of AP is: " << x_rand << " " << y_rand << " " << z_rand << std::endl;
         ui->tabWidget->setCurrentIndex(1);
     }
 }
@@ -333,12 +332,6 @@ void Ap_config::setMobility(Ap &one_ap)
         one_ap.mode = ui->comboBox_2->currentText();
         one_ap.distance_change_interval = ui->doubleSpinBox_5->value();
         one_ap.random_velocity = ui->doubleSpinBox_18->value();
-
-        std::cout << "The boundaries of AP is: " << one_ap.boundaries[0] << " " << one_ap.boundaries[1] << " " << one_ap.boundaries[2] << " " << one_ap.boundaries[3] << std::endl;
-        std::cout << "The time change interval of AP is: " << one_ap.time_change_interval << std::endl;
-        std::cout << "The distance change interval of AP is: " << one_ap.distance_change_interval << std::endl;
-        std::cout << "The random velocity of AP is: " << one_ap.random_velocity << std::endl;
-        std::cout << "The mode of AP is: " << one_ap.mode.toStdString() << std::endl;
 
         ui->tabWidget->setCurrentIndex(2);
         one_ap.Mobility = true;
@@ -610,8 +603,6 @@ void Ap_config::Get_Edca_Config(Ap &ap_now, Edca_config &edca_config)
 void Ap_config::Get_Antenna_Config(Ap &ap_now, Antenna &antenna_config)
 {
     // set the Antenna
-    std::cout << "the number of antenna is: " << antenna_config.antenna_list.size() << std::endl;
-
     if (antenna_config.AntennaCount() == 0)
     {
         QMessageBox::critical(
@@ -622,7 +613,6 @@ void Ap_config::Get_Antenna_Config(Ap &ap_now, Antenna &antenna_config)
         return;
     }
 
-    std::cout << antenna_config.antenna_list[0]->Antenna_type.toStdString() << std::endl;
     for (auto item : antenna_config.antenna_list)
     {
         ap_now.Antenna_list.push_back(std::move(item));

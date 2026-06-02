@@ -1,7 +1,6 @@
 #include "antennas.h"
 #include "ui_antennas.h"
 #include "config_ui_style.h"
-#include <iostream>
 
 Antenna::Antenna(QWidget *parent) : QDialog(parent), ui(new Ui::Antenna) {
   ui->setupUi(this);
@@ -29,8 +28,6 @@ void Antenna::on_pushButton_3_clicked() {
   qint16 BeamWidth = ui->spinBox_2->value();
   qint8 rowCount = ui->tableWidget->rowCount();
   qint8 lastrow = rowCount - 1;
-  std::cout << antenna_type.toStdString() << "  " << MaxGain << " " << BeamWidth
-            << " " << rowCount << std::endl;
   ui->tableWidget->setItem(lastrow, 0, new QTableWidgetItem(antenna_type));
   ui->tableWidget->setItem(lastrow, 1,
                            new QTableWidgetItem(QString::number(MaxGain)));

@@ -60,7 +60,6 @@ uint64_t g_rxOutcomeSuccessCount = 0;
 uint64_t g_rxOutcomeMapMissCount = 0;
 uint64_t g_rxOutcomePtrHitCount = 0;
 uint64_t g_rxOutcomeUidHitCount = 0;
-uint64_t g_rxOutcomeDebugPrintCount = 0;
 
 uint8_t
 ToSharedPhyState(WifiPhyState state)
@@ -333,17 +332,6 @@ SniffUtils::SniffUtils()
 
 SniffUtils::~SniffUtils()
 {
-    // std::cout << "[THR-SUMMARY] finalize=" << g_finalizeCount
-    //           << " finalize_success=" << g_finalizeSuccessCount
-    //           << " finalize_thr_nonzero=" << g_finalizeNonZeroThroughputCount
-    //           << " begin=" << g_beginCount
-    //           << " begin_thr_nonzero=" << g_beginNonZeroThroughputCount
-    //           << " rx_outcome=" << g_rxOutcomeCount
-    //           << " rx_outcome_success=" << g_rxOutcomeSuccessCount
-    //           << " rx_outcome_map_miss=" << g_rxOutcomeMapMissCount
-    //           << " rx_outcome_ptr_hit=" << g_rxOutcomePtrHitCount
-    //           << " rx_outcome_uid_hit=" << g_rxOutcomeUidHitCount
-    //           << " window_bytes=" << g_throughputBytesInWindow << std::endl;
 }
 
 bool
@@ -384,7 +372,6 @@ SniffUtils::Initialize(const NetDeviceContainer& devices, double simulationTime)
     g_rxOutcomeMapMissCount = 0;
     g_rxOutcomePtrHitCount = 0;
     g_rxOutcomeUidHitCount = 0;
-    g_rxOutcomeDebugPrintCount = 0;
     m_ppdu_uid_to_id.clear();
     m_packet_uid_to_ppdu_id.clear();
     m_seq_key_to_ppdu_id.clear();
@@ -699,7 +686,6 @@ SniffUtils::Finalize_Tag_PPDU(ppdu_id_t id)
         meta.snr_margin_db_x10 = rt.snr_db_x10;
     }
     meta.tx_time_ns = meta.tx_end_ns;
-    //std::cout << "PPDU[COMPLETED] " << std::endl;
     meta.record_type = SHM_RECORD_PPDU_UPDATE;
     AppendPpdu(m_ring, meta);
 
@@ -799,15 +785,6 @@ SniffUtils::Sniff_rx_ppdu_outcome(Ptr<const WifiPpdu> ppdu,
 
     const bool hasSuccessfulMpdu =
         std::any_of(outcomes.begin(), outcomes.end(), [](bool ok) { return ok; });
-    if (g_rxOutcomeDebugPrintCount < 120)
-    {
-        const auto trueCount = std::count(outcomes.begin(), outcomes.end(), true);
-        // std::cout << "[THR-RXOUTCOME] id=" << id << " uid=" << ppdu->GetUid()
-        //           << " outcomes=" << outcomes.size()
-        //           << " true_count=" << trueCount
-        //           << " has_success=" << (hasSuccessfulMpdu ? 1 : 0) << std::endl;
-        g_rxOutcomeDebugPrintCount++;
-    }
     if (!hasSuccessfulMpdu)
     {
         auto rt = m_ppdu_runtime.find(id);
@@ -904,7 +881,6 @@ SniffUtils::Sniff_ppdu_begin(uint16_t nodeId,
     /*Initialize Check*/
     if (!m_initialized)
     {
-        std::cout << "SniffUtils not initialized" << std::endl;
         return;
     }
 
@@ -997,8 +973,6 @@ SniffUtils::Sniff_ppdu_begin(uint16_t nodeId,
     meta.rx_state = 0;       // not received
     meta.rx_fail_reason = 0; // no failure
     meta.phy_state = SHM_PHY_STATE_TX;
-
-    //std::cout << "PPDU[UNCOMPLETED] " << meta.id << " written to shared memory" << std::endl;
 
     // Write it (uncomplished) into the ring buffer
     const uint32_t ring_idx = AppendPpdu(m_ring, meta);
@@ -1102,99 +1076,17 @@ ShmExample()
     ppdu.rx_state = 1; // success
 
     AppendPpdu(ring, ppdu);
-
-    //std::cout << "PPDU written to shared memory" << std::endl;
 }
 
 void
 SniffUtils::PrintPpduMeta(uint32_t ring_index) const
 {
-    if (!m_ring)
-    {
-        std::cout << "[PrintPpduMeta] RingBuffer not initialized\n";
-        return;
-    }
-
-    if (ring_index >= MAX_PPDU_NUM)
-    {
-        std::cout << "[PrintPpduMeta] Invalid ring index\n";
-        return;
-    }
-
-    const PPDU_Meta& m = m_ring->records[ring_index];
-
-    std::cout << "\n========== PPDU META ==========\n";
-    std::cout << "ID            : " << m.id << "\n";
-    std::cout << "STA ID        : " << m.sta_id << "\n";
-    std::cout << "Channel ID    : " << static_cast<int>(m.channel_id) << "\n";
-
-    std::cout << "Frame Type    : " << static_cast<int>(m.frame_type) << "\n";
-    std::cout << "MCS           : " << static_cast<int>(m.mcs) << "\n";
-    std::cout << "MPDUs         : " << m.mpdu_aggregation << "\n";
-    std::cout << "Size (bytes)  : " << m.size_bytes << "\n";
-    std::cout << "Throughput    : " << m.throughput_mbps_x100 / 100.0 << " Mbps\n";
-
-    std::cout << "Sender        : ";
-    for (int i = 0; i < 6; ++i)
-    {
-        std::cout << std::hex << static_cast<int>(m.sender[i]) << (i < 5 ? ":" : "");
-    }
-    std::cout << std::dec << "\n";
-
-    std::cout << "Receiver      : ";
-    for (int i = 0; i < 6; ++i)
-    {
-        std::cout << std::hex << static_cast<int>(m.receiver[i]) << (i < 5 ? ":" : "");
-    }
-    std::cout << std::dec << "\n";
-
-    std::cout << "TX start (ns) : " << m.tx_start_ns << "\n";
-    std::cout << "TX end   (ns) : " << m.tx_end_ns << "\n";
-    std::cout << "TX dur   (ns) : " << m.tx_duration_ns << "\n";
-
-    std::cout << "RX state      : " << static_cast<int>(m.rx_state) << "\n";
-    std::cout << "Fail reason   : " << static_cast<int>(m.rx_fail_reason) << "\n";
-
-    if (m.rx_state == 1)
-    {
-        std::cout << "Decode time   : " << m.successDecodeTime << " ns\n";
-    }
-
-    if (m.collision)
-    {
-        std::cout << "Collision @   : " << m.collision_time_ns << " ns\n";
-    }
-
-    if (m.snr_margin_db_x10 != 0)
-    {
-        std::cout << "SNR        : " << m.snr_margin_db_x10 / 10.0 << " dB\n";
-    }
-
-    if (m.snr_gap_db_x10 != 0)
-    {
-        std::cout << "SNR gap       : " << m.snr_gap_db_x10 / 10.0 << " dB\n";
-    }
-
-    else
-    {
-        std::cout << "SNR gap       : N/A\n";
-    }
-
-    std::cout << "================================\n";
+    (void) ring_index;
 }
 
 void
 SniffUtils::PrintLastPpdu() const
 {
-    if (!m_ring || m_ring->write_index == 0)
-    {
-        std::cout << "[PrintLastPpdu] No PPDU available\n";
-        return;
-    }
-
-    uint32_t last = (m_ring->write_index - 1) % MAX_PPDU_NUM;
-
-    PrintPpduMeta(last);
 }
 
 } // namespace ns3

@@ -1177,7 +1177,6 @@ bool Simu_Config::generateStandaloneScript(QString &outSceneFileName) {
 
   QProcess genProcess;
   genProcess.setWorkingDirectory(QFileInfo(generatorPath).dir().path());
-  std::cout<< "Running generator: " << generatorPath.toStdString() <<" "<< projectPath.toStdString() <<" "<< outputPath.toStdString() << std::endl;
   genProcess.start(generatorPath, {projectPath, outputPath});
   if (!genProcess.waitForFinished(-1)) {
     qWarning() << "Script generation did not finish";

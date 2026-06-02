@@ -9,7 +9,6 @@
 #include <QTimer>
 #include <algorithm>
 #include <cmath>
-#include <iostream>
 
 namespace {
 static const QColor kPanelBg(244, 248, 252);
@@ -23,7 +22,6 @@ static const QColor kAvgLine(18, 184, 134);
 static const QColor kAxis(84, 96, 113);
 static const QColor kTextPrimary(34, 43, 56);
 static const QColor kTextMuted(103, 116, 131);
-static uint64_t g_chartDebugPrintCount = 0;
 static constexpr quint64 kBroadcastMac = 0xFFFFFFFFFFFFULL;
 
 static bool isBroadcastLikeMac(quint64 mac)
@@ -175,15 +173,6 @@ void ThroughputChartWidget::appendPpdu(const PpduVisualItem &ppdu)
     m_sampleItems.append(ppdu);
     m_totalThroughputX100Sum += ppdu.throughputMbpsX100;
     m_totalSampleCount++;
-
-    if (g_chartDebugPrintCount < 200)
-    {
-        std::cout << "[THR-CHART] id=" << ppdu.id
-                  << " rx_state=" << static_cast<int>(ppdu.rxState)
-                  << " thr_x100=" << ppdu.throughputMbpsX100
-                  << " tx_end_ns=" << ppdu.txEndNs << std::endl;
-        g_chartDebugPrintCount++;
-    }
 
     while (m_sampleTimeNs.size() > m_maxBuckets)
     {

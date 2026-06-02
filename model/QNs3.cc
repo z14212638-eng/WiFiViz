@@ -110,23 +110,6 @@ ParseBoolToken(const json& value)
     throw std::runtime_error(std::string("Unexpected boolean value type : ") + value.type_name());
 }
 
-// Get a general optional bool value
-// static std::optional<bool>
-// GetOptionalBool(const json& j, const char* key)
-// {
-//     if (!j.contains(key))
-//     {
-//         std::cout << "The key  \"" << key << "\" is [Not Found] in the object" << std::endl;
-//         return std::nullopt;
-//     }
-//     else if (j.at(key).is_null())
-//     {
-//         std::cout << "The key  \"" << key << "\" is [Null] in the object" << std::endl;
-//         return std::nullopt;
-//     }
-//     return ParseBoolToken(j.at(key));
-// }
-
 // Get a general optional value
 template <typename T>
 static std::optional<T>
@@ -134,12 +117,10 @@ GetOptionalValue(const json& j, const char* key)
 {
     if (!j.contains(key))
     {
-        std::cout << "The key  \"" << key << "\" is [Not Found] in the object" << std::endl;
         return std::nullopt;
     }
     else if (j.at(key).is_null())
     {
-        std::cout << "The key  \"" << key << "\" is [Null] in the object" << std::endl;
         return std::nullopt;
     }
     return j.at(key).get<T>();
@@ -855,8 +836,6 @@ GetFilesInFolder(const std::string& folderPath, const std::string& extension)
         }
     }
 
-    std::cout << "Loaded " << files.size() << " files from folder: "
-              << resolvedPath.string() << std::endl;
     return files;
 }
 

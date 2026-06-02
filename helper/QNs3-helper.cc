@@ -270,10 +270,8 @@ std::string
 QNs3Helper::BuildChannelSettings(const NodeConfig& cfg)
 {
     const auto band = (cfg.Frequency <= 3.0) ? "BAND_2_4GHZ" : "BAND_5GHZ";
-    std::cout << (cfg.Frequency >= 3.0) << std::endl;
     std::ostringstream oss;
     oss << "{" << cfg.Channel_number << ", " << cfg.Bandwidth << ", " << band << ", 0}";
-    std::cout << oss.str() << std::endl;
     return oss.str();
 }
 

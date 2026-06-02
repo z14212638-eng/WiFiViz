@@ -141,6 +141,7 @@ target_include_directories(WiFiVizApp PRIVATE
 # Expose the ns-3 source root at compile time
 target_compile_definitions(WiFiVizApp PRIVATE
     NS3_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+    QT_NO_DEBUG_OUTPUT
 )
 
 # Set target properties
