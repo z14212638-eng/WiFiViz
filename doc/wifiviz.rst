@@ -36,7 +36,7 @@ Install the module as:
 
 .. code-block:: text
 
-   /path/to/ns-3.46/contrib/wifiviz
+   /path/to/ns-3/contrib/wifiviz
 
 Configure and build |ns3| from the |ns3| root:
 
@@ -45,13 +45,11 @@ Configure and build |ns3| from the |ns3| root:
    ./ns3 configure
    ./ns3 build
 
-For full GUI mode, copy the launcher into ``scratch`` and run it through the
-standard |ns3| scratch target mechanism:
+For full GUI mode, run the module example launcher through |ns3|:
 
 .. code-block:: bash
 
-   cp contrib/wifiviz/tools/visualizer.cc scratch/visualizer.cc
-   ./ns3 run visualizer
+   ./ns3 run wifiviz-visualizer
 
 For one-command mode, a user script can expose a command-line flag and call the
 helper:
@@ -130,7 +128,7 @@ Validation
 ----------
 
 The module has been exercised through the GUI workflow and example scripts on
-ns-3.46. Automated coverage is currently focused on lightweight helper behavior.
+ns-3.48. Automated coverage is currently focused on lightweight helper behavior.
 
 References
 ----------

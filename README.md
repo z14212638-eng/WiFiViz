@@ -1,3 +1,5 @@
+[En](README.md) | [中文](README.zh-CN.md)
+
 # WiFiViz
 
 `WiFiViz` is an ns-3 contrib module for building, running, and analyzing
@@ -35,6 +37,7 @@ After cloning this repository, the important paths are:
 wifiviz/
 ├── CMakeLists.txt
 ├── README.md
+├── README.zh-CN.md
 ├── doc/
 ├── examples/
 ├── helper/
@@ -44,7 +47,7 @@ wifiviz/
 └── Simulation/
 ```
 
-Install the repository itself as `/path/to/ns-3.46/contrib/wifiviz`.
+Install the repository itself as `/path/to/ns-3/contrib/wifiviz`.
 The optional full-GUI launcher is registered as the module example
 `wifiviz-visualizer`.
 
@@ -68,7 +71,7 @@ The optional full-GUI launcher is registered as the module example
 
 ## Requirements
 
-WiFiViz is developed and tested as an ns-3.46 or newer contrib module on Linux. The
+WiFiViz is developed and tested as an ns-3.48 contrib module on Linux. The
 repository must be installed as `contrib/wifiviz` inside an ns-3 source tree;
 some GUI paths and helper launch commands intentionally use that module path.
 
@@ -77,7 +80,7 @@ Required build environment:
 - Linux with a graphical desktop session for the Qt viewer. X11 or Wayland is
   fine. For headless SSH/server runs, use script mode with `launchViewer=false`
   or set up display forwarding before launching `WiFiVizApp`.
-- ns-3.46 or newer source tree configured with CMake.
+- ns-3.48 source tree configured with CMake.
 - CMake 3.16 or newer. The Qt frontend uses CMake AUTOMOC, AUTOUIC, and AUTORCC.
 - A compiler matching ns-3's C++ standard for the ns-3 contrib module.
 - A C++17-capable compiler for the Qt frontend and
@@ -138,7 +141,7 @@ Clone this repository directly into the ns-3 `contrib/` directory. The clone
 name must be `wifiviz` so ns-3 sees the expected module path:
 
 ```bash
-cd /path/to/ns-3.46/contrib
+cd /path/to/ns-3/contrib
 git clone --depth 1 https://github.com/z14212638-eng/WiFiViz.git wifiviz
 ```
 
@@ -149,7 +152,7 @@ wifiviz-visualizer`.
 The final path must be:
 
 ```text
-/path/to/ns-3.46/contrib/wifiviz
+/path/to/ns-3/contrib/wifiviz
 ```
 
 ## Build
@@ -158,7 +161,7 @@ Configure and build ns-3 from the ns-3 root directory. Enable examples so the
 `wifiviz-visualizer` launcher target is built:
 
 ```bash
-cd /path/to/ns-3.46
+cd /path/to/ns-3
 ./ns3 configure --enable-examples
 ./ns3 build
 ```
@@ -234,7 +237,7 @@ WiFiVizHelper::ConfigureVisualizerSampling(precise, rough);
 Then run the script normally. No WiFiViz command-line arguments are needed:
 
 ```bash
-cd /path/to/ns-3.46
+cd /path/to/ns-3
 ./ns3 run your-target
 ```
 
@@ -283,7 +286,7 @@ Ptr<SniffUtils> sniffer =
 Run it with parameters:
 
 ```bash
-cd /path/to/ns-3.46
+cd /path/to/ns-3
 ./ns3 run "your-target --enable-wifiviz=1 --launch-viewer=1 --precise=1 --rough=1 --simulation-time=10"
 ```
 
@@ -309,7 +312,7 @@ graphical configuration workflow.
 Start the GUI through ns-3:
 
 ```bash
-cd /path/to/ns-3.46
+cd /path/to/ns-3
 ./ns3 run wifiviz-visualizer
 ```
 
@@ -353,7 +356,7 @@ contains an `NS-3 Path` action so the working directory can be changed later.
 
 Use this page to:
 
-- set `/path/to/ns-3.46`,
+- set `/path/to/ns-3`,
 - verify that the GUI can locate ns-3 files,
 - prepare the default scene browser and script generator paths.
 
@@ -686,7 +689,7 @@ contrib/wifiviz/
 Run:
 
 ```bash
-cd /path/to/ns-3.46
+cd /path/to/ns-3
 ./ns3 configure
 ./ns3 build
 ```

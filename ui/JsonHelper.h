@@ -337,7 +337,7 @@ public:
     QJsonObject *m_sta_config = nullptr;
     QJsonObject *m_ap_config = nullptr;
     std::shared_ptr<BuildingConfig> m_building = std::make_shared<BuildingConfig>();
-    QString Base_dir = "~/Visualization/ns-3.46/contrib/wifiviz/Simulation/Designed/";
+    QString Base_dir = "~/Visualization/ns-3/contrib/wifiviz/Simulation/Designed/";
     QString Run_dir = "";
     QString Ap_file_path = "";
     QString Sta_file_path = "";

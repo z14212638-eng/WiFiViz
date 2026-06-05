@@ -1,0 +1,357 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 87db254..f629a3a 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -3,6 +3,28 @@ if(HAVE_STDINT_H)
+     add_definitions(-DHAVE_STDINT_H)
+ endif()
+ 
++# ---------------------------------------------------------------------------
++# Prerequisite detection.
++#
++# The wifiviz ns-3 library requires nlohmann/json (model/QNs3.cc) and
++# Boost.Interprocess (model/SniffUtils.*). These are NOT bundled with ns-3.
++# If either is missing, skip the whole module so it is reported under
++# "Modules that cannot be built" rather than failing the build at compile
++# time with a confusing "file not found" error.
++# ---------------------------------------------------------------------------
++find_package(nlohmann_json 3.2.0 QUIET)
++check_include_file_cxx("boost/interprocess/managed_shared_memory.hpp"
++                       WIFIVIZ_HAVE_BOOST_IPC)
++
++if(NOT nlohmann_json_FOUND)
++    message(STATUS "Skipping contrib module 'wifiviz': nlohmann_json (>= 3.2.0) not found")
++    return()
++endif()
++if(NOT WIFIVIZ_HAVE_BOOST_IPC)
++    message(STATUS "Skipping contrib module 'wifiviz': Boost.Interprocess headers not found")
++    return()
++endif()
++
+ set(examples_as_tests_sources)
+ if(${ENABLE_EXAMPLES})
+     set(examples_as_tests_sources
+@@ -10,9 +32,9 @@ if(${ENABLE_EXAMPLES})
+         )
+ endif()
+ 
+-set(CMAKE_CXX_STANDARD 23)
+-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+-set(CMAKE_CXX_EXTENSIONS OFF) 
++# The library targets only C++17/20 features. Inherit the ns-3 default
++# (C++20) instead of forcing C++23, which needlessly fails on older or
++# AppleClang toolchains. Do not force CMAKE_CXX_STANDARD here.
+ 
+ build_lib(
+     LIBNAME wifiviz
+@@ -28,9 +50,28 @@ build_lib(
+                       ${libmobility}
+                       ${libaodv}
+                       ${libwifi}
++                      nlohmann_json::nlohmann_json
+     TEST_SOURCES test/wifiviz-test-suite.cc
+                  ${examples_as_tests_sources}
+ )
+ 
+-# Include the Qt UI frontend application
+-add_subdirectory(ui)
++# Boost.Interprocess is header-only; make sure its include path reaches the
++# module library (the headers were located by check_include_file_cxx above,
++# but build_lib does not add Boost automatically).
++find_package(Boost QUIET)
++if(Boost_INCLUDE_DIRS)
++    target_include_directories(${libwifiviz} PRIVATE ${Boost_INCLUDE_DIRS})
++endif()
++
++# Qt GUI front-end (WiFiVizApp) is OPTIONAL. Only descend into ui/ when Qt is
++# available, otherwise a missing Qt would make `./ns3 configure` fail for the
++# ENTIRE tree rather than just skipping this front-end.
++find_package(Qt6 COMPONENTS Core Gui Widgets QUIET)
++if(NOT Qt6_FOUND)
++    find_package(Qt5 5.15 COMPONENTS Core Gui Widgets QUIET)
++endif()
++if(Qt6_FOUND OR Qt5_FOUND)
++    add_subdirectory(ui)
++else()
++    message(STATUS "wifiviz: Qt (6 or 5.15+) not found; skipping the WiFiVizApp GUI front-end")
++endif()
+diff --git a/README.md b/README.md
+index 15b0d4c..9432618 100644
+--- a/README.md
++++ b/README.md
+@@ -47,8 +47,10 @@ wifiviz/
+ ```
+ 
+ Install the repository itself as `/path/to/ns-3.46/contrib/wifiviz`.
+-The optional full-GUI launcher is stored inside the module at
+-`tools/visualizer.cc` and can be copied into ns-3 `scratch/`.
++The optional full-GUI launcher lives inside the module at
++`tools/visualizer.cc` and is registered as the module example
++`wifiviz-visualizer`, so it can be started directly with
++`./ns3 run wifiviz-visualizer` (no copy into `scratch/` is needed).
+ 
+ ## Main Capabilities
+ 
+@@ -81,11 +83,16 @@ Required build environment:
+   or set up display forwarding before launching `WiFiVizApp`.
+ - ns-3.46 source tree configured with CMake.
+ - CMake 3.16 or newer. The Qt frontend uses CMake AUTOMOC, AUTOUIC, and AUTORCC.
+-- A C++23-capable compiler for the ns-3 contrib module and scratch launcher.
+-  GCC with libstdc++ is the recommended toolchain.
++- A compiler matching ns-3's C++ standard for the ns-3 contrib module. The
++  module inherits ns-3's C++ standard (as of ns-3.48 release, this is C++20).
+ - A C++17-capable compiler for the Qt frontend and
+   `wifiviz-script-generator`. In practice this is normally the same compiler.
+ 
++If the required third-party libraries below are missing, the module disables
++itself cleanly at configure time (it is listed under "Modules that cannot be
++built") instead of breaking the ns-3 build. The Qt frontend is likewise skipped
++when Qt is not found.
++
+ Required ns-3 modules:
+ 
+ - `core`, `network`, `internet`, `mobility`, `wifi`, `applications`,
+@@ -145,36 +152,25 @@ cd /path/to/ns-3.46/contrib
+ git clone <repo-url> wifiviz
+ ```
+ 
+-Copy the full-GUI launcher from the module into ns-3 `scratch/`:
++The full-GUI launcher (`tools/visualizer.cc`) is registered as the module
++example `wifiviz-visualizer`, so it is built automatically with the rest of the
++module (when examples are enabled) and started with `./ns3 run
++wifiviz-visualizer`. No copy into `scratch/` is required.
+ 
+-```bash
+-cd /path/to/ns-3.46
+-cp contrib/wifiviz/tools/visualizer.cc scratch/visualizer.cc
+-```
+-
+-This extra copy step is intentional. `./ns3 run visualizer` works because ns-3
+-automatically treats `scratch/visualizer.cc` as a user script target named
+-`visualizer`. Without this scratch launcher, supporting the same command would
+-require changing ns-3's own source tree or build/run rules, for example by
+-adding a built-in runner target or modifying how `./ns3 run` discovers
+-non-scratch executables. This project avoids destructive changes to ns-3 and
+-keeps WiFiViz as a plugin-style contrib module plus an optional scratch
+-launcher.
+-
+-The final paths must be:
++The final path must be:
+ 
+ ```text
+ /path/to/ns-3.46/contrib/wifiviz
+-/path/to/ns-3.46/scratch/visualizer.cc
+ ```
+ 
+ ## Build
+ 
+-Configure and build ns-3 from the ns-3 root directory:
++Configure and build ns-3 from the ns-3 root directory. Enable examples so the
++`wifiviz-visualizer` launcher target is built:
+ 
+ ```bash
+ cd /path/to/ns-3.46
+-./ns3 configure
++./ns3 configure --enable-examples
+ ./ns3 build
+ ```
+ 
+@@ -185,6 +181,12 @@ build/WiFiVizApp
+ build/wifiviz-script-generator
+ ```
+ 
++If `nlohmann_json` or Boost.Interprocess are not installed, the module is
++skipped at configure time (reported under "Modules that cannot be built") and
++none of the targets above are produced; install the requirements and
++re-configure. If Qt is missing, the ns-3 library still builds but `WiFiVizApp`
++is skipped.
++
+ `WiFiVizApp` is the Qt frontend. `wifiviz-script-generator` is used by the
+ GUI to convert JSON scenario files into a standalone ns-3 C++ script.
+ 
+@@ -321,23 +323,17 @@ Full mode starts the WiFiViz GUI first and lets the GUI generate a scratch
+ script from the configuration pages. This mode is useful for quickly trying the
+ graphical configuration workflow.
+ 
+-Copy the launcher into ns-3 `scratch/`:
+-
+-```bash
+-cd /path/to/ns-3.46
+-cp contrib/wifiviz/tools/visualizer.cc scratch/visualizer.cc
+-```
+-
+ Start the GUI through ns-3:
+ 
+ ```bash
+-./ns3 run visualizer
++cd /path/to/ns-3.46
++./ns3 run wifiviz-visualizer
+ ```
+ 
+-The `visualizer` launcher is the `scratch/visualizer.cc` file copied above.
+-ns-3 builds it as a normal scratch target named `visualizer`. The launcher only
+-starts `build/WiFiVizApp` from the ns-3 root; it does not modify ns-3 internals.
+-If you only need to start the Qt application directly, use:
++`wifiviz-visualizer` is the module example built from `tools/visualizer.cc`
++(see the Installation section). The launcher only starts `build/WiFiVizApp`
++from the ns-3 root; it does not modify ns-3 internals. If you only need to start
++the Qt application directly, use:
+ 
+ ```bash
+ ./build/WiFiVizApp
+@@ -699,7 +695,7 @@ contrib/wifiviz/
+     └── utils/
+         └── wifiviz-script-generator.cc
+ └── tools/
+-    └── visualizer.cc          # copy to scratch/ for `./ns3 run visualizer`
++    └── visualizer.cc          # module example: `./ns3 run wifiviz-visualizer`
+ ```
+ 
+ ## Troubleshooting
+diff --git a/examples/CMakeLists.txt b/examples/CMakeLists.txt
+index 4770694..3032001 100644
+--- a/examples/CMakeLists.txt
++++ b/examples/CMakeLists.txt
+@@ -9,3 +9,13 @@ build_lib_example(
+     SOURCE_FILES wifiviz-overhead-benchmark.cc
+     LIBRARIES_TO_LINK ${libwifiviz}
+ )
++
++# Full-GUI launcher, registered as a module example so it can be started with
++#   ./ns3 run wifiviz-visualizer
++# No need to copy tools/visualizer.cc into scratch/: ns-3 resolves `./ns3 run`
++# targets across src/ and contrib/ modules, not just scratch/.
++build_lib_example(
++    NAME wifiviz-visualizer
++    SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/../tools/visualizer.cc
++    LIBRARIES_TO_LINK ${libwifiviz} ${libcore}
++)
+diff --git a/helper/QNs3-helper.cc b/helper/QNs3-helper.cc
+index aa265cb..5c3367f 100644
+--- a/helper/QNs3-helper.cc
++++ b/helper/QNs3-helper.cc
+@@ -559,7 +559,12 @@ QNs3Helper::EnableVisualizer(const NetDeviceContainer& devices,
+     }
+ 
+     Ptr<SniffUtils> sniffUtils = CreateObject<SniffUtils>();
+-    sniffUtils->Initialize(devices, simulationTime);
++    if (!sniffUtils->Initialize(devices, simulationTime))
++    {
++        // Shared-memory setup failed (already reported). Continue the
++        // simulation without visualization instead of aborting the run.
++        return nullptr;
++    }
+     return sniffUtils;
+ }
+ 
+diff --git a/model/SniffUtils.cc b/model/SniffUtils.cc
+index bc1b769..046303b 100644
+--- a/model/SniffUtils.cc
++++ b/model/SniffUtils.cc
+@@ -348,10 +348,29 @@ SniffUtils::Initialize(const NetDeviceContainer& devices, double simulationTime)
+ {
+     this->Set_simulation_time(simulationTime);
+ 
+-    m_shm = new boost::interprocess::managed_shared_memory(boost::interprocess::open_or_create,
+-                                                           SHM_NAME,
+-                                                           1024UL * 1024 * 1024); // 1GB
+-    m_ring = m_shm->find_or_construct<RingBuffer>("PpduRing")();
++    // The segment holds exactly one fixed-size RingBuffer. Size it to that
++    // object plus a small slack for the Boost segment-manager bookkeeping,
++    // rather than an arbitrary 1 GiB. Capacity is governed by MAX_PPDU_NUM,
++    // not by the segment size, so over-provisioning buys nothing and only
++    // risks the OS refusing the allocation (small /dev/shm, containers, macOS).
++    const std::size_t segmentSize = sizeof(RingBuffer) + 64UL * 1024;
++    try
++    {
++        m_shm = new boost::interprocess::managed_shared_memory(
++            boost::interprocess::open_or_create, SHM_NAME, segmentSize);
++        m_ring = m_shm->find_or_construct<RingBuffer>("PpduRing")();
++    }
++    catch (const boost::interprocess::interprocess_exception& e)
++    {
++        std::cerr << "[WiFiViz] Could not create the " << (segmentSize >> 20)
++                  << " MiB shared-memory segment '" << SHM_NAME << "': " << e.what()
++                  << "\n[WiFiViz] Visualization is disabled for this run; the simulation"
++                  << " will continue normally." << std::endl;
++        delete m_shm;
++        m_shm = nullptr;
++        m_ring = nullptr;
++        return false;
++    }
+     m_ring->write_index = 0;
+     m_ring->read_index = 0;
+     g_throughputWindow.clear();
+@@ -1061,7 +1080,7 @@ void
+ ShmExample()
+ {
+     managed_shared_memory shm(open_or_create, SHM_NAME,
+-                              1024UL * 1024 * 1024); // 1GB
++                              sizeof(RingBuffer) + 64UL * 1024);
+ 
+     RingBuffer* ring = shm.find_or_construct<RingBuffer>("PpduRing")();
+     ring->write_index = 0;
+diff --git a/ui/CMakeLists.txt b/ui/CMakeLists.txt
+index aebd9ee..318668c 100644
+--- a/ui/CMakeLists.txt
++++ b/ui/CMakeLists.txt
+@@ -143,10 +143,13 @@ target_compile_definitions(WiFiVizApp PRIVATE
+     NS3_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+ )
+ 
+-# Set target properties
++# Set target properties.
++# Note: do NOT set MACOSX_BUNDLE here. A bundle would place the binary at
++# WiFiVizApp.app/Contents/MacOS/WiFiVizApp, but the launcher and README expect
++# a plain executable at build/WiFiVizApp. Leaving it off also avoids the
++# "uninitialized MACOSX_BUNDLE_* variable" CMake developer warnings.
+ set_target_properties(WiFiVizApp PROPERTIES
+     WIN32_EXECUTABLE TRUE
+-    MACOSX_BUNDLE TRUE
+ )
+ 
+ # Qt6 specific finalization
+diff --git a/ui/utils/CMakeLists.txt b/ui/utils/CMakeLists.txt
+index b909e2e..52492a3 100644
+--- a/ui/utils/CMakeLists.txt
++++ b/ui/utils/CMakeLists.txt
+@@ -9,27 +9,19 @@ if(NOT NS3_ROOT)
+     message(FATAL_ERROR "NS3_ROOT not set. Pass -DNS3_ROOT=/path/to/ns-3")
+ endif()
+ 
+-# 查找 nlohmann_json 库
+-find_package(nlohmann_json 3.2.0)
++# nlohmann_json is required by the generator. The parent module CMakeLists
++# already guarantees it is present before this subdirectory is reached, so
++# require it here too instead of silently continuing with a broken include
++# path (which only defers a "nlohmann/json.hpp not found" compile error).
++find_package(nlohmann_json 3.2.0 REQUIRED)
+ 
+-if(nlohmann_json_FOUND)
+-    # 如果系统安装了 nlohmann_json
+-    add_executable(wifiviz-script-generator wifiviz-script-generator.cc)
+-    target_link_libraries(wifiviz-script-generator nlohmann_json::nlohmann_json)
+-else()
+-    # 如果没有安装，尝试使用头文件版本
+-    # 你可以从 https://github.com/nlohmann/json/releases 下载 json.hpp
+-    # 并放在 include/nlohmann/ 目录下
+-    message(STATUS "nlohmann_json not found, using header-only version")
+-    add_executable(wifiviz-script-generator wifiviz-script-generator.cc)
+-    target_include_directories(wifiviz-script-generator PRIVATE
+-        ${NS3_ROOT}/contrib/wifiviz/model
+-        /usr/include
+-        /usr/local/include
+-    )
+-endif()
++add_executable(wifiviz-script-generator wifiviz-script-generator.cc)
++target_link_libraries(wifiviz-script-generator nlohmann_json::nlohmann_json)
+ 
+-# 使用 filesystem 库
+-target_link_libraries(wifiviz-script-generator stdc++fs)
++# Only GCC's libstdc++ before version 9 needs the separate stdc++fs library
++# for <filesystem>. Linking it unconditionally breaks Clang/libc++ (macOS).
++if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.0)
++    target_link_libraries(wifiviz-script-generator stdc++fs)
++endif()
+ 
+ install(TARGETS wifiviz-script-generator DESTINATION bin)
